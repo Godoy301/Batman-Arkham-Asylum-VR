@@ -1,0 +1,20 @@
+/build/
+/build64/
+/re/headless/
+/re/backups/
+/re/evidence/
+__pycache__/
+*.pdb
+/assets/bat-wipe.bin
+
+# Binaries, captures and game packages - never upload
+*.dll
+*.exe
+*.lib
+*.obj
+*.ilk
+*.exp
+*.log
+*.bmp
+*.upk
+/helper64/build*/
