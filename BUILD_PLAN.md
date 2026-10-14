@@ -26,6 +26,8 @@ memory github-repos (repo exists since 2026-10-11, public; README layout, no jar
   uninstall from the game folder removes all, deletes data + backup. All .ps1 parse clean.
 - INSTALLED on JJ's game with the package installer (his aa_rendering.ini kept; shortcuts on desktop + Start menu).
   Previous files: re/backups/before-release-0.1.0.
+- RELEASED: commit 33b7802 pushed; GitHub release v0.1.0 (Latest) with dist/BatmanAsylumVR-ArkhamAsylum.zip (61.8 MB,
+  GitHub asset digest = local sha256 9e977876953e0463...); repo description updated; repo PUBLIC.
 - HEADSET pending for the tidied panel. Open issue carried to 0.1.x: shotgun shells read infinitely far (A2p stepper).
 
 ## A2p: effect stepper (toolkit) to name the shell draw
