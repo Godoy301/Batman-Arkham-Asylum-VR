@@ -60,6 +60,9 @@ bool copy_rgba_layer(ID3D11DeviceContext* ctx, ID3D11Texture2D* dst,
 // bottom-right). Blending off.
 bool screen_in_eye(ID3D11DeviceContext* ctx, ID3D11RenderTargetView* dst, UINT dstW, UINT dstH,
                    ID3D11ShaderResourceView* src, const float corners[4][4]);
+// Project a premultiplied HUD sheet over the existing scene; never clear it.
+bool premul_in_eye(ID3D11DeviceContext*, ID3D11RenderTargetView*, UINT, UINT,
+                   ID3D11ShaderResourceView*, const float corners[4][4]);
 
 // Batman City ROOMGRUNGE: lay a captured full-screen overlay onto a screen in the room, inside one
 // eye's image. The game's overlay draw was replayed twice, onto black and onto white. Any blend

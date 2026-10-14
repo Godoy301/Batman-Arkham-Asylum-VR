@@ -1,50 +1,113 @@
 <p align="center">
-  <img src="https://cdn.cloudflare.steamstatic.com/steam/apps/35140/capsule_616x353.jpg" width="616" alt="Batman: Arkham Asylum Game of the Year Edition">
+  <img src="https://cdn.cloudflare.steamstatic.com/steam/apps/35140/capsule_616x353.jpg" width="616"
+       alt="Batman: Arkham Asylum Game of the Year Edition">
 </p>
 
-> **Work in progress - not ready to play yet, and there is no release.** Batman: Arkham Asylum Game of the Year Edition in PC VR, made the same way as
-> [Batman City VR](https://github.com/junglejuz/Batman-Arkham-City-VR) and
-> [Batman: Arkham Knight VR](https://github.com/junglejuz/Batman-Arkham-Knight-VR): the game draws both eyes itself
-> (native stereo), with per-eye DLSS and OpenXR for Virtual Desktop and SteamVR. The notes below are the developers'
-> working notes. The picture above is the game's own Steam store artwork, shown from Steam (Batman: Arkham Asylum Game of the Year Edition © Warner Bros.
-> Entertainment, Batman and all characters © DC). This is an unofficial fan mod and will need your own copy of the game.
+# Batman Asylum VR
 
-# Batman Asylum VR — development build 0.1.0-A0a
+Batman: Arkham Asylum (Game of the Year Edition) in PC VR, with per-eye DLSS and OpenXR for Virtual Desktop and
+SteamVR. The game draws both eyes itself, every frame, from the same moment (native stereo), so depth is correct and
+nothing lags behind when the camera swings. Made the same way as
+[Batman City VR](https://github.com/junglejuz/Batman-Arkham-City-VR) and
+[Batman Origins VR](https://github.com/junglejuz/Batman-Arkham-Origins-VR).
 
-Asylum's isolated port starts from the Origins O1H core accepted by JJ as the
-behavior reference. Target: Steam Asylum GOTY on E:, x86 ShippingPC-BmGame.exe.
-The retail target imports D3D9, so an Origins DX11 DLL cannot be dropped in as
-the completed conversion. Read ASYLUM_PLAN.md and BUILD_PLAN.md for the route.
+## What you get
 
-Implemented: dedicated D3D9/XInput proxies, exact-build guard, plain 9On12
-game-device adoption, GPU-only 11On12 game-frame transfer into the copied
-OpenXR/UI core, fenced resource return/reset, separate logs/settings,
-Origins-style F10/both-stick controller panel and capture controls, headset eye
-resolution query, Virtual Desktop/default-runtime and SteamVR launchers,
-manifest-owned install/uninstall and temporary near-square graphics profiles
-with byte-exact restoration. Asylum-specific guarded command observers gather
-the real render-thread/caller evidence needed for native stereo. GPU tests use
-the actual bridge; no game is launched by the agent.
+- **Native stereo 3D** with full head tracking (look around and lean in), on the game's own third-person camera.
+- **DLSS for each eye** (NVIDIA RTX graphics cards): each eye is drawn smaller and upscaled by NVIDIA's DLSS, which
+  also gives clean anti-aliasing. Choose the quality in the VR menu.
+- **OpenXR, with Virtual Desktop and SteamVR**: runs on your PC VR software's own OpenXR runtime (no extra layers or
+  injectors). A separate SteamVR shortcut starts the game through SteamVR without changing your PC's VR settings.
+- **The render size comes from your headset**: the launcher asks your PC VR software for its picture size each time.
+- **HUD on a panel in front of you**, at a depth both eyes agree on.
+- **Grapple prompts on the grapple points themselves**, at their real depth. When a grapple point is out of view, a
+  pointer near the edge of your view shows which way it is.
+- **Detective mode details** (the lines and rings on people) point at the people they belong to.
+- **Menus and loading screens** on a screen in the room.
+- **An in-headset VR menu**: hold both thumbsticks down (or press F10). Render size, DLSS, HUD size and distance, and
+  more. Settings are saved.
 
-**This first build is a game-frame/cinema bridge, not the finished native VR
-conversion.** Asylum camera/constructor/view-state seams, same-frame native
-pairs, HUD separation, shader/DoF behavior, full-view transition triggers,
-gamepad title skip, depth/AFW and active per-eye DLSS remain to implement and
-validate. The frozen x64 helper builds successfully but is not installed or
-advertised as an active feature yet. No Origins engine offsets, shader identities
-or private captured bat asset are linked into this build.
+## What you need
 
-Development launch after installation:
-`E:/Games/Steam/steamapps/common/Batman Arkham Asylum GOTY/Binaries/Batman Asylum VR.bat`.
-JJ drives the first grouped run: title/main menu, campaign, pause/map/detective,
-return to menu and quit. F10 or both sticks held 0.6 s opens the panel; capture
-saves evidence under `%LOCALAPPDATA%/Batman_Asylum`. Normal Steam launches remain
-flat. Origins' installation/settings are preserved.
+- **Batman: Arkham Asylum Game of the Year Edition** on Steam, on Windows 10 or 11. (The mod is made for that exact
+  version of the game; the installer checks it.)
+- **A PC VR headset and the software you use for PC VR games** (for example Virtual Desktop, SteamVR or the Meta Quest
+  Link app).
+- **A gamepad.** Quest Touch controllers work through Virtual Desktop, which presents them as a gamepad.
 
-Build: CMake Visual Studio 2022 Win32, then Release. CTest covers foreign-host/
-proxy forwarding, real 9On12 GPU transfer/reset and graphics-profile rollback.
-All three checks pass; A0a is installed and its 14 owned files are hash-verified.
-Current source/build/install/live/headset status is recorded in BUILD_PLAN.md
-and `re/evidence/installed-build.json`. A0's first runs exposed graphics-factory
-recursion/desktop fallback; A0a replaces that hook with independent factory
-wrappers. Its real-game/headset result is pending.
+Tested with: Quest 3 through Virtual Desktop, RTX 4070 Ti (about 65-80 frames per second). A SteamVR launcher is
+included; it has not been tested with this game yet.
+
+## Installing
+
+1. Start the game once from Steam as normal, wait for the main menu, and quit (this makes the game's settings files).
+2. Download `BatmanAsylumVR-ArkhamAsylum.zip` from [Releases](../../releases) and unpack it anywhere (7-Zip works).
+   Most of its size is NVIDIA's DLSS library.
+3. Double-click `Install-BatmanAsylumVR.bat`. If Windows SmartScreen appears: More info, then Run anyway. The
+   installer puts everything into the game folder; you don't copy anything there yourself.
+4. Start your PC VR software and make sure it is the active OpenXR runtime (Virtual Desktop and SteamVR each have a
+   setting for this).
+5. Start the game with the **Batman Asylum VR** shortcut on your desktop. To play through SteamVR instead, use
+   **Batman Asylum VR (SteamVR)**.
+
+Each VR start sets the game to a window at your headset's picture size with V-sync, motion blur, depth of field and
+the game's own anti-aliasing off, and puts your own graphics settings back when the game closes. Starting the game
+from Steam still plays the normal flat game.
+
+## In the game
+
+| | |
+|---|---|
+| VR menu | hold both thumbsticks down for half a second, or F10 |
+| Recenter | the VR menu's "Recentre view and screens" button |
+| Save the last 10 seconds of both eyes | the VR menu's save button, or F2 |
+
+## Known issues
+
+- Spent shotgun shells on the floor show at the wrong depth (they look far away).
+- Some menu changes can briefly show a black window.
+- AFW (one eye drawn, the other warped) is in the VR menu but is experimental: use Native.
+
+## If something is wrong
+
+| What you see | What to do |
+|---|---|
+| Nothing in the headset, the game plays on the monitor | Start your PC VR software before the game, make it the active OpenXR runtime, and start the game from the Batman Asylum VR shortcut. |
+| A window says the headset could not be asked for its picture size | Connect the headset to your PC VR software first, then start the shortcut again. |
+| The installer stops: "the game has not made its settings yet" | Start the game once from Steam, wait for the main menu, quit, run the installer again. |
+| The installer or launcher says the game is a different version | The mod works only with the Steam Game of the Year Edition. |
+| Low frame rate | VR menu: lower the render size (VR resolution), or choose a faster DLSS setting. |
+
+## Removing it
+
+Run **Uninstall Batman Asylum VR** from the Start menu (or `Uninstall-BatmanAsylumVR.bat` in the game's Binaries
+folder). It removes the mod and the shortcuts and deletes the mod's own VR settings, logs and pictures (in
+`%LOCALAPPDATA%\Batman_Asylum`). Your game settings are never changed outside a VR session, so there is nothing else
+to put back.
+
+## Building from source
+
+Visual Studio 2022 and CMake:
+
+```
+cmake -S . -B build-native9 -G "Visual Studio 17 2022" -A Win32
+cmake --build build-native9 --config Release
+cmake -S helper64 -B build64 -G "Visual Studio 17 2022" -A x64
+cmake --build build64 --config Release
+ctest --test-dir build-native9 -C Release
+python tools/make_package.py
+```
+
+The DLSS helper needs NVIDIA's NGX SDK. Development notes: `STATUS.md`, `BUILD_PLAN.md`, `RE_NOTES.md`,
+`FIX_CHANGES.md`.
+
+## Credits
+
+Built on [bioshock-vr](https://github.com/mohamad-balouza/bioshock-vr) (MIT), MinHook, Dear ImGui and the OpenXR SDK.
+The per-eye DLSS method follows the [Luma Framework](https://github.com/Filoppi/Luma-Framework)'s Arkham Knight mod.
+DLSS and NVAPI are NVIDIA's. Full list: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The picture at the top is the game's own Steam store artwork, shown from Steam (Batman: Arkham Asylum © Warner Bros.
+Entertainment); it is not part of this repository.
+
+Batman: Arkham Asylum © Warner Bros. Entertainment Inc. Batman and related characters are trademarks of DC Comics. This
+is an unofficial fan mod and needs your own copy of the game.

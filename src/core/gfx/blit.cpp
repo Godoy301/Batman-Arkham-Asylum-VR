@@ -482,6 +482,14 @@ bool screen_in_eye(ID3D11DeviceContext* ctx, ID3D11RenderTargetView* dst, UINT d
     return draw_internal(ctx, dst, src, dstW, dstH, g_ps, nullptr, g_vsScreen);
 }
 
+bool premul_in_eye(ID3D11DeviceContext* ctx, ID3D11RenderTargetView* dst, UINT w, UINT h,
+                   ID3D11ShaderResourceView* src, const float corners[4][4]) {
+    if (!ensure_pipeline(ctx)) return false;
+    D3D11_MAPPED_SUBRESOURCE m{};
+    if (FAILED(ctx->Map(g_screenCb,0,D3D11_MAP_WRITE_DISCARD,0,&m))) return false;
+    memcpy(m.pData,corners,64);ctx->Unmap(g_screenCb,0);
+    return draw_internal(ctx,dst,src,w,h,g_ps,g_blend,g_vsScreen);
+}
 namespace {
 ID3D11PixelShader* g_psWarp = nullptr;
 ID3D11Buffer* g_warpCb = nullptr;

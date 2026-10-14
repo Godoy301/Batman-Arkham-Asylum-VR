@@ -225,7 +225,7 @@ bool save_texture_bmp(ID3D11DeviceContext* ctx, ID3D11Texture2D* tex, const wcha
             put(2, 54 + img); put(10, 54); put(14, 40); put(18, w); put(22, h);
             hdr[26] = 1; hdr[28] = 32; put(34, img);
             fwrite(hdr, 1, 54, f);
-            const bool bgr = td.Format == DXGI_FORMAT_B8G8R8A8_UNORM || td.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+            const bool bgr = td.Format == DXGI_FORMAT_B8G8R8A8_UNORM || td.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB || td.Format == DXGI_FORMAT_B8G8R8X8_UNORM;
             std::vector<uint8_t> row(w * 4);
             for (uint32_t y = 0; y < h; ++y) {
                 const uint8_t* src = static_cast<const uint8_t*>(m.pData) + (h - 1 - y) * m.RowPitch;

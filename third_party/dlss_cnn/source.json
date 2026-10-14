@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/NVIDIA/DLSS",
+  "tag": "v3.7.20",
+  "commit": "a11125971f4d5f19ce17ca8cbe6f703eaa16de76",
+  "path": "lib/Windows_x86_64/rel/nvngx_dlss.dll",
+  "sha256": "0d5560f8c09e23bca5ff6922e41fe70fefbee2ed9d0d613ea3f12ef971d2d81b"
+}

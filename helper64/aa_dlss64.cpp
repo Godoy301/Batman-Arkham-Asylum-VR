@@ -1,4 +1,4 @@
-// aa_dlss64.exe - Batman City's 64-bit DLSS helper (DLSS_PLAN.md). Arkham City is 32-bit and NVIDIA's DLSS library
+// aa_dlss64.exe - Asylum's 64-bit DLSS helper, adapted from City. Asylum is 32-bit and NVIDIA's DLSS library
 // is 64-bit only, so the eye pictures come here through shared textures. Started by the game (batman_asylum.dll),
 // ends with it. D0: copy input -> output. D1: one DLSS Super Resolution feature per eye (NGX), after AKN's dlss.cpp
 // (akvr_native/src/dlss.cpp; method from Luma's Arkham Knight mod - Luma Framework, Filippo Tarpini / Garamond,
@@ -13,13 +13,22 @@
 
 #include "dlss_shared.h"
 #include "gpu_finish.h"
+#include <psapi.h>
+#include <vector>
+#include <mutex>
+#include <atomic>
+#include <cstring>
+#include <cstdlib>
 #include "nvsdk_ngx.h"
 #include "nvsdk_ngx_helpers.h"
+#include <nvapi.h>
 
 namespace {
 
 FILE* g_log = nullptr;
+std::mutex g_logMutex;
 void logf(const char* fmt, ...) {
+    std::lock_guard<std::mutex> lock(g_logMutex);
     if (!g_log) return;
     SYSTEMTIME st;
     GetLocalTime(&st);
@@ -35,6 +44,32 @@ void logf(const char* fmt, ...) {
 ID3D11Device* g_dev = nullptr;
 ID3D11DeviceContext* g_ctx = nullptr;
 wchar_t g_dir[MAX_PATH] = L"";
+wchar_t g_libraryDir[MAX_PATH] = L"";
+std::atomic<int> g_driverPreset{};
+void read_override(){
+    // Official NVAPI GetNGXOverrideState, process-local observation only.
+    // Public SDK query IDs: nvapi_interface.h. Never write DRS or feedback.
+    using Query=void*(__cdecl*)(NvU32);using Init=int(__cdecl*)();
+    using Get=int(__cdecl*)(NV_NGX_DLSS_OVERRIDE_GET_STATE_PARAMS*);
+    static HMODULE module=LoadLibraryExW(L"nvapi64.dll",nullptr,LOAD_LIBRARY_SEARCH_SYSTEM32);
+    static Query query=module?reinterpret_cast<Query>(GetProcAddress(module,"nvapi_QueryInterface")):nullptr;
+    static Init init=query?reinterpret_cast<Init>(query(0x0150e828)):nullptr;
+    static Get get=query?reinterpret_cast<Get>(query(0x3fd96fba)):nullptr;
+    static bool ready=init&&init()==0;
+    if(!ready||!get)return;
+    NV_NGX_DLSS_OVERRIDE_GET_STATE_PARAMS state{};state.version=NV_NGX_DLSS_OVERRIDE_GET_STATE_PARAMS_VER;state.processIdentifier=GetCurrentProcessId();
+    const int status=get(&state);
+    if(status==0)g_driverPreset=(state.feedbackMaskSR&NV_NGX_DLSS_OVERRIDE_FLAG_PRESET)?int(state.renderPreset):0;
+    logf("NVIDIA override read-only own PID: status=%d SRflags=%llx renderPreset=%u appliedPreset=%d",status,state.feedbackMaskSR,state.renderPreset,g_driverPreset.load());
+}
+void log_library(){
+ HMODULE modules[512]{};DWORD size{};
+ if(!EnumProcessModules(GetCurrentProcess(),modules,sizeof(modules),&size))return;
+ for(unsigned i=0;i<std::min<unsigned>(512,size/sizeof(HMODULE));++i){wchar_t path[MAX_PATH]{};GetModuleFileNameW(modules[i],path,MAX_PATH);auto* name=wcsrchr(path,L'\\');if(!name||!wcsstr(name,L"nvngx_dlss"))continue;
+  DWORD ignored{},n=GetFileVersionInfoSizeW(path,&ignored);std::vector<unsigned char> bytes(n);VS_FIXEDFILEINFO* info{};UINT len{};
+  if(n&&GetFileVersionInfoW(path,0,n,bytes.data())&&VerQueryValueW(bytes.data(),L"\\",reinterpret_cast<void**>(&info),&len))logf("actual DLSS library %ls version %u.%u.%u.%u",path,HIWORD(info->dwFileVersionMS),LOWORD(info->dwFileVersionMS),HIWORD(info->dwFileVersionLS),LOWORD(info->dwFileVersionLS));
+ }
+}
 
 struct Set {
     ID3D11Texture2D* tex[bcdlss::kTexCount] = {};
@@ -105,10 +140,19 @@ void tq_end(Tq* q) {
 bool ngx_init() {
     if (g_ngxTried) return g_ngxOk;
     g_ngxTried = true;
-    const wchar_t* paths[1] = {g_dir};
+    const wchar_t* paths[1] = {g_libraryDir};
     NVSDK_NGX_FeatureCommonInfo info{};
     info.PathListInfo.Path = paths;
     info.PathListInfo.Length = 1;
+    info.LoggingInfo.LoggingCallback=[](const char* message,NVSDK_NGX_Logging_Level,NVSDK_NGX_Feature){
+        constexpr char marker[]="NGX_OVERRIDE_RENDER_PRESET_SELECTION from DRS, value = ";
+        if(auto* p=strstr(message,marker))g_driverPreset=atoi(p+sizeof(marker)-1);
+        // Preserve provider-selected library and overrides, without per-frame
+        // verbose file flushes in the game. Benchmarks retain the full trace.
+        if(wcsstr(GetCommandLineW(),L"--benchmark")||strstr(message,"ReadValuesFromDRS")||strstr(message,"NGXInitLog")||strstr(message,"feature dlss snippet:")||strstr(message,"NGXLoadLibrary"))logf("NGX: %s",message);
+    };
+    info.LoggingInfo.MinimumLoggingLevel=NVSDK_NGX_LOGGING_LEVEL_ON;
+    info.LoggingInfo.DisableOtherLoggingSinks=true;
     // our own project id (unregistered with NVIDIA, as Luma / AKN)
     NVSDK_NGX_Result r = NVSDK_NGX_D3D11_Init_with_ProjectID("8f3a1c62-4e9b-4d27-b1c5-6a2e9d4f0b31", NVSDK_NGX_ENGINE_TYPE_CUSTOM,
                                                              "1.0", g_dir, g_dev, &info);
@@ -150,10 +194,9 @@ bool make_feature(Feature& f, const bcdlss::Shared* sh, int m) {
                                            : NVSDK_NGX_PerfQuality_Value_MaxPerf;
     cp.InFeatureCreateFlags = flags;
     NVSDK_NGX_Result r = NGX_D3D11_CREATE_DLSS_EXT(g_ctx, &f.h, f.p, &cp);
-    if (NVSDK_NGX_FAILED(r)) {
-        cp.Feature.InPerfQualityValue = NVSDK_NGX_PerfQuality_Value_Balanced;
-        r = NGX_D3D11_CREATE_DLSS_EXT(g_ctx, &f.h, f.p, &cp);
-    }
+    log_library();
+    read_override();
+    // A rejected Quality/DLAA request must not silently become Balanced.
     logf("DLSS feature %ux%u -> %ux%u, mode %d, flags 0x%x, preset %d: %s (0x%08x)", sh->renderW, sh->renderH, sh->outW,
          sh->outH, m, flags, sh->preset, NVSDK_NGX_SUCCEED(r) ? "created" : "FAILED", unsigned(r));
     f.rw = sh->renderW; f.rh = sh->renderH; f.ow = sh->outW; f.oh = sh->outH;
@@ -208,6 +251,10 @@ bool make_device(const bcdlss::Shared* sh) {
         a->Release();
     }
     f->Release();
+    if (!chosen) {
+        logf("game adapter LUID not found; refusing a different GPU");
+        return false;
+    }
     const D3D_FEATURE_LEVEL fl[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
     const HRESULT hr = D3D11CreateDevice(chosen, chosen ? D3D_DRIVER_TYPE_UNKNOWN : D3D_DRIVER_TYPE_HARDWARE, nullptr, 0,
                                          fl, 2, D3D11_SDK_VERSION, &g_dev, nullptr, &g_ctx);
@@ -232,6 +279,7 @@ struct Req {
     bool overlap; // the game waits for fenceOut instead of our finish-first wait
 };
 int serve(bcdlss::Shared* sh, int e, const Req& rq) {
+    sh->evaluatedMode=0;
     if(rq.overlap) sh->req[e & 1].evaluatedMode=0;
     Set& s = g_set[e & 1];
     LARGE_INTEGER qf, ta, tb, tc;
@@ -258,7 +306,7 @@ int serve(bcdlss::Shared* sh, int e, const Req& rq) {
             if (!f.h || f.rw != sh->renderW || f.rh != sh->renderH || f.ow != sh->outW || f.oh != sh->outH ||
                 f.mode != rq.dlssMode || f.depthInv != sh->depthInverted || f.preset != sh->preset)
                 make_feature(f, sh, rq.dlssMode);
-            if (f.failed) {
+            if (f.failed || !f.h) {
                 status = -6;
             } else {
                 NVSDK_NGX_D3D11_DLSS_Eval_Params ep{};
@@ -286,6 +334,7 @@ int serve(bcdlss::Shared* sh, int e, const Req& rq) {
                     logf("eye %d: first DLSS evaluate", e);
                 }
                 if(rq.overlap && NVSDK_NGX_SUCCEED(r)) sh->req[e & 1].evaluatedMode=rq.dlssMode;
+                if(!rq.overlap && NVSDK_NGX_SUCCEED(r)) sh->evaluatedMode=rq.dlssMode;
                 if (g_tqN >= 50) {
                     sh->gpuMs = float(g_tqSum / g_tqN);
                     g_tqSum = 0;
@@ -310,7 +359,7 @@ int serve(bcdlss::Shared* sh, int e, const Req& rq) {
     if (sh->syncMode >= 1 && !rq.overlap) {
         LARGE_INTEGER td;
         QueryPerformanceCounter(&td);
-        if (!g_finish.wait(g_dev, g_ctx, 100)) ++sh->finishTimeouts;
+        if (!g_finish.wait(g_dev, g_ctx, 1000)) {++sh->finishTimeouts;status=-11;sh->evaluatedMode=0;}
         LARGE_INTEGER te;
         QueryPerformanceCounter(&te);
         sh->finishMs = float(double(te.QuadPart - td.QuadPart) * 1000.0 / double(qf.QuadPart));
@@ -322,31 +371,79 @@ int serve(bcdlss::Shared* sh, int e, const Req& rq) {
         sh->finishMs = 0.0f;
     }
     sh->ngxState = g_ngxTried ? (g_ngxOk ? 1 : -1) : 0;
+    sh->driverPreset=g_driverPreset;
     return status;
 }
 
 } // namespace
 
+int benchmark(){
+ bcdlss::Shared sh{};IDXGIFactory1* factory{};if(FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))))return 20;IDXGIAdapter1* adapter{};
+ for(UINT i=0;factory->EnumAdapters1(i,&adapter)!=DXGI_ERROR_NOT_FOUND;++i){DXGI_ADAPTER_DESC1 d{};adapter->GetDesc1(&d);if(d.VendorId==0x10de){sh.luidLow=d.AdapterLuid.LowPart;sh.luidHigh=d.AdapterLuid.HighPart;adapter->Release();adapter=nullptr;break;}adapter->Release();adapter=nullptr;}factory->Release();if(!make_device(&sh)||!ngx_init())return 21;
+ const bool cnn=wcsstr(GetCommandLineW(),L"--cnn")!=nullptr;sh.preset=cnn?5:0;
+ for(int mode:{4,3,1,2,5}){
+  sh.outW=2284;sh.outH=2448;const float ratio=mode==1?1.f:mode==2?.77f:mode==3?2.f/3.f:mode==4?.58f:.5f;
+  sh.renderW=mode==4?1322:(UINT(sh.outW*ratio)&~1u);sh.renderH=mode==4?1478:(UINT(sh.outH*ratio)&~1u);
+  std::vector<ID3D11Texture2D*> textures(4,nullptr);bool allocated=true;
+  for(unsigned t=0;t<4;++t){D3D11_TEXTURE2D_DESC d{};d.Width=t==3?sh.outW:sh.renderW;d.Height=t==3?sh.outH:sh.renderH;d.ArraySize=d.MipLevels=d.SampleDesc.Count=1;d.Format=t==1?DXGI_FORMAT_R32_FLOAT:t==2?DXGI_FORMAT_R16G16_FLOAT:DXGI_FORMAT_R8G8B8A8_UNORM;d.BindFlags=D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET|D3D11_BIND_UNORDERED_ACCESS;
+   allocated=allocated&&SUCCEEDED(g_dev->CreateTexture2D(&d,nullptr,&textures[t]));if(textures[t]){ID3D11RenderTargetView* rt{};if(SUCCEEDED(g_dev->CreateRenderTargetView(textures[t],nullptr,&rt))){const float value[4]={t==0?.25f:t==1?.5f:0.f,t==0?.5f:0.f,t==0?.75f:0.f,1.f};g_ctx->ClearRenderTargetView(rt,value);rt->Release();}}
+  }
+  if(!allocated)return 22;
+  Feature f;bool made=make_feature(f,&sh,mode);double gpuTotal{},cpuTotal{};
+  ID3D11Query *start{},*end{},*disjoint{};D3D11_QUERY_DESC q{D3D11_QUERY_TIMESTAMP,0};g_dev->CreateQuery(&q,&start);g_dev->CreateQuery(&q,&end);q.Query=D3D11_QUERY_TIMESTAMP_DISJOINT;g_dev->CreateQuery(&q,&disjoint);if(!start||!end||!disjoint)return 23;
+  bool evaluated=made;unsigned samples{};
+  LARGE_INTEGER freq{};QueryPerformanceFrequency(&freq);
+  for(unsigned i=0;i<160&&evaluated;++i){NVSDK_NGX_D3D11_DLSS_Eval_Params ep{};ep.Feature.pInColor=textures[0];ep.pInDepth=textures[1];ep.pInMotionVectors=textures[2];ep.Feature.pInOutput=textures[3];ep.InRenderSubrectDimensions.Width=sh.renderW;ep.InRenderSubrectDimensions.Height=sh.renderH;ep.InMVScaleX=ep.InMVScaleY=1;ep.InReset=i==0;
+   if(i==40){if(!g_finish.wait(g_dev,g_ctx,5000)){evaluated=false;break;}g_ctx->Begin(disjoint);g_ctx->End(start);}
+   LARGE_INTEGER a{},b{};QueryPerformanceCounter(&a);auto r=NGX_D3D11_EVALUATE_DLSS_EXT(g_ctx,f.h,f.p,&ep);QueryPerformanceCounter(&b);evaluated=NVSDK_NGX_SUCCEED(r);
+   if(evaluated&&i>=40){cpuTotal+=1000.*(b.QuadPart-a.QuadPart)/freq.QuadPart;++samples;}
+  }
+  if(evaluated){g_ctx->End(end);g_ctx->End(disjoint);evaluated=g_finish.wait(g_dev,g_ctx,5000);D3D11_QUERY_DATA_TIMESTAMP_DISJOINT data{};UINT64 x{},y{};
+   HRESULT rd=g_ctx->GetData(disjoint,&data,sizeof(data),0),ra=g_ctx->GetData(start,&x,sizeof(x),0),rb=g_ctx->GetData(end,&y,sizeof(y),0);
+   const auto until=GetTickCount64()+1000;while(evaluated&&(rd==S_FALSE||ra==S_FALSE||rb==S_FALSE)&&GetTickCount64()<until){SwitchToThread();rd=g_ctx->GetData(disjoint,&data,sizeof(data),0);ra=g_ctx->GetData(start,&x,sizeof(x),0);rb=g_ctx->GetData(end,&y,sizeof(y),0);}
+   logf("BENCH timestamps finish=%u hr=%08x/%08x/%08x disjoint=%u frequency=%llu begin=%llu end=%llu",evaluated,unsigned(rd),unsigned(ra),unsigned(rb),data.Disjoint,data.Frequency,x,y);
+   evaluated=evaluated&&rd==S_OK&&ra==S_OK&&rb==S_OK&&!data.Disjoint&&data.Frequency&&y>=x;
+   if(evaluated)gpuTotal=1000.*(y-x)/data.Frequency;
+  }
+  logf("BENCH requestedLibrary=%s driverPreset=%d mode=%d input=%ux%u output=%ux%u samples=%u evaluateGPU=%.3f ms/eye CPU=%.3f ms/eye valid=%u (isolated NGX, no game/handoff/headset)",cnn?"CNN3.7.20":"current310.9.1",g_driverPreset.load(),mode,sh.renderW,sh.renderH,sh.outW,sh.outH,samples,samples?gpuTotal/samples:0,samples?cpuTotal/samples:0,evaluated);
+  if(f.h)NVSDK_NGX_D3D11_ReleaseFeature(f.h);if(f.p)NVSDK_NGX_D3D11_DestroyParameters(f.p);for(auto* t:textures)if(t)t->Release();start->Release();end->Release();disjoint->Release();
+  if(made&&!evaluated)return 24;
+ }
+ return 0;
+}
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", path, MAX_PATH);
     if (n && n < MAX_PATH - 64) {
-        wcscat_s(path, L"\\Batman_Asylum\\dlss_helper.log");
+        wcscat_s(path,wcsstr(GetCommandLineW(),L"--benchmark")?(wcsstr(GetCommandLineW(),L"--cnn")?L"\\Batman_Asylum\\dlss_benchmark_cnn.log":L"\\Batman_Asylum\\dlss_benchmark_current.log"):L"\\Batman_Asylum\\dlss_helper.log");
         g_log = _wfopen(path, L"w");
     }
     GetModuleFileNameW(nullptr, g_dir, MAX_PATH);
     if (wchar_t* sl = wcsrchr(g_dir, L'\\')) *sl = 0; // nvngx_dlss.dll sits next to the helper
+    wcscpy_s(g_libraryDir,g_dir);if(wcsstr(GetCommandLineW(),L"--cnn"))wcscat_s(g_libraryDir,L"\\CNN");
     logf("aa_dlss64 starting (pid %lu), folder %ls", GetCurrentProcessId(), g_dir);
+    logf("requested DLSS library folder %ls",g_libraryDir);
+    if(wcsstr(GetCommandLineW(),L"--benchmark"))return benchmark();
 
-    HANDLE map = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, bcdlss::kMapName);
+    wchar_t session[64]{},mapName[128]{},reqName[128]{},doneName[128]{};
+    if(const auto* arg=wcsstr(GetCommandLineW(),L"--session ")){
+        if(swscanf_s(arg+10,L"%63ls",session,unsigned(_countof(session)))!=1)return 1;
+        for(const auto* c=session;*c;++c)if((*c<L'0'||*c>L'9')&&*c!=L'_')return 1;
+    }
+    if(session[0]){swprintf_s(mapName,L"%s_%s",bcdlss::kMapName,session);swprintf_s(reqName,L"%s_%s",bcdlss::kReqName,session);swprintf_s(doneName,L"%s_%s",bcdlss::kDoneName,session);}
+    else{wcscpy_s(mapName,bcdlss::kMapName);wcscpy_s(reqName,bcdlss::kReqName);wcscpy_s(doneName,bcdlss::kDoneName);}
+    HANDLE map = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, mapName);
     if (!map) { logf("no shared block - exiting"); return 1; }
     auto* sh = static_cast<bcdlss::Shared*>(MapViewOfFile(map, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(bcdlss::Shared)));
-    HANDLE req = OpenEventW(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, bcdlss::kReqName);
-    HANDLE done = OpenEventW(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, bcdlss::kDoneName);
+    HANDLE req = OpenEventW(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, reqName);
+    HANDLE done = OpenEventW(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, doneName);
     if (!sh || !req || !done || sh->version != bcdlss::kVersion) { logf("shared block / events missing or old version - exiting"); return 1; }
     HANDLE game = OpenProcess(SYNCHRONIZE, FALSE, sh->gamePid);
     if (!make_device(sh)) return 1;
     sh->helperPid = GetCurrentProcessId();
+    sh->ngxState=ngx_init()?1:-1;
+    sh->driverPreset=g_driverPreset;
+    MemoryBarrier();
     sh->helperReady = 1;
     logf("ready");
 
@@ -392,33 +489,30 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             MemoryBarrier(); // the slot's numbers were written before its serial
             LARGE_INTEGER t0, t1;
             QueryPerformanceCounter(&t0);
-            // Without the fences we still serve (the keyed mutexes order it and hand the pictures back); the game
-            // then times out on fenceOut and stops asking for overlap.
+            // Fail closed if shared fences cannot be opened. Never place a foreign-context wait on the GPU.
             const bool fences = open_fences();
-            int status = 0;
+            int status = fences ? 0 : -10;
             if (sh->gen != g_gen) {
                 g_gen = sh->gen;
                 if (!open_sets(sh)) status = -1;
             }
             if (status == 0) {
-                // Wait here, on the CPU, until the game's copy has run - never on the graphics card. On a timeout
-                // serve anyway: the keyed mutexes still order it (a card-side wait, counted).
+                // Wait on the CPU until input copy/release has run. A timeout rejects the request before serve.
                 const ULONGLONG deadline = GetTickCount64() + 100;
                 while (fences && fenceIn->GetCompletedValue() < serial) {
                     const ULONGLONG now = GetTickCount64();
-                    if (now >= deadline || FAILED(fenceIn->SetEventOnCompletion(serial, fenceEv))) { ++sh->fenceWaitTimeouts; break; }
+                    if (now >= deadline || FAILED(fenceIn->SetEventOnCompletion(serial, fenceEv))) { ++sh->fenceWaitTimeouts; status=-12; break; }
                     WaitForSingleObject(fenceEv, DWORD(deadline - now));
                 }
                 const Req rq{sh->req[e].jitterX, sh->req[e].jitterY, sh->req[e].reset, sh->req[e].dlssMode, true};
-                status = serve(sh, e, rq);
-                if (!fences && status == 0) status = -10;
+                if(status==0)status = serve(sh, e, rq); // never submit a foreign-context GPU wait after a fence timeout
             }
             QueryPerformanceCounter(&t1);
             sh->req[e].status = status;
             sh->req[e].helperMs = static_cast<float>((t1.QuadPart - t0.QuadPart) * 1000.0 / qf.QuadPart);
             MemoryBarrier();
             sh->req[e].answered = serial; // before the fence: the game reads it once the fence has passed
-            if (c4) {
+            if (c4 && fenceOut) {
                 c4->Signal(fenceOut, serial); // after our release, so the game's next acquire is already satisfied
                 g_ctx->Flush();
             }
@@ -442,6 +536,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         QueryPerformanceCounter(&t1);
         sh->status = status;
         sh->helperMs = static_cast<float>((t1.QuadPart - t0.QuadPart) * 1000.0 / qf.QuadPart);
+        MemoryBarrier();
         sh->answered = sh->serial;
         SetEvent(done);
         if (++served == 1 || (status && (served % 300) == 1))

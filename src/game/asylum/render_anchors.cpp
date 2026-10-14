@@ -2,6 +2,7 @@
 // STATIC: tiny thiscall bodies, no stack arguments, return command size 8.
 // These do not identify a gameplay caller or authorize stereo doubling yet.
 #include "scene.h"
+#include "native_stereo.h"
 #include "core/util/log.h"
 #include <windows.h>
 #include <MinHook.h>
@@ -23,6 +24,11 @@ void observed(unsigned which,void* self) {
     const auto n=++counts[which];if(n>3)return;
     uintptr_t viewport=0;read(static_cast<unsigned char*>(self)+4,&viewport,4);
     uintptr_t vt=0;read(reinterpret_cast<void*>(viewport),&vt,4);
+    uintptr_t client=0,clientVt=0,draw=0;
+    read(reinterpret_cast<void*>(viewport+0x20),&client,4);
+    read(reinterpret_cast<void*>(client),&clientVt,4);
+    read(reinterpret_cast<void*>(clientVt+8),&draw,4);
+    BVR_LOG("[aa render] raw viewport+20 client %p vtable %p Draw slot+8 %p (candidate, not camera ABI proof)",reinterpret_cast<void*>(client),reinterpret_cast<void*>(clientVt),reinterpret_cast<void*>(draw));
     void* stack[10]{};const USHORT depth=RtlCaptureStackBackTrace(0,10,stack,nullptr);
     char line[256]{};int at=0;
     for(USHORT i=0;i<depth && at<230;++i) {
@@ -33,7 +39,7 @@ void observed(unsigned which,void* self) {
         which,n,GetCurrentThreadId(),reinterpret_cast<void*>(viewport),unsigned(vt-base),line);
 }
 DWORD __fastcall begin_a(void* self,void* edx) {observed(0,self);return originals[0](self,edx);}
-DWORD __fastcall begin_b(void* self,void* edx) {observed(1,self);return originals[1](self,edx);}
+DWORD __fastcall begin_b(void* self,void* edx) {observed(1,self);native::begin_render(self);return originals[1](self,edx);}
 }
 void install_render_anchors() {
     base=reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
@@ -54,7 +60,8 @@ void install_render_anchors() {
     }
     if(ok)ok=MH_ApplyQueued()==MH_OK;
     if(!ok) {for(auto p:targets)MH_QueueDisableHook(p);MH_ApplyQueued();}
-    BVR_LOG("[aa render] Asylum guarded command observers %s; stereo replay not enabled",ok?"installed":"unavailable");
+    BVR_LOG("[aa render] Asylum guarded command observers %s; command B also carries native eye labels",ok?"installed":"unavailable");
 }
-void render_anchor_status() {BVR_LOG("[aa render] begin commands A/B %u/%u; camera seams still pending",counts[0].load(),counts[1].load());}
+void render_anchor_status() {BVR_LOG("[aa render] begin commands A/B %u/%u",counts[0].load(),counts[1].load());}
+bool ordinary_render_seen() {return counts[1].load(std::memory_order_relaxed)>0;}
 }

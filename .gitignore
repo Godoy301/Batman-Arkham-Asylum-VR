@@ -18,3 +18,8 @@ __pycache__/
 *.bmp
 *.upk
 /helper64/build*/
+
+# Build output, release staging, reference copy of another project (inspected only, not used)
+/build-native9/
+/dist/
+/re/dxwrapper-reference/

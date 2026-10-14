@@ -11,6 +11,7 @@
 #include <algorithm>
 #include "core/gfx/gfx_hud.h"
 #include "core/gfx/hud_capture.h"
+#include "core/gfx/stereo_history.h"
 #include "core/util/log.h"
 #include "core/util/xr_math.h"
 
@@ -24,6 +25,8 @@
 #include <dxgi.h>
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
+#include "core/vr/flat_preview.h"
+#include "core/gfx/encoded_colour.h"
 
 #include "core/vr/openxr_input.h"
 
@@ -273,6 +276,7 @@ bool g_hudPlaced = false;
 XrPosef g_hudPose{{0, 0, 0, 1}, {0, 0, 0}};
 // The flat screen (movies, loading): placed in front of the head each time it appears.
 bool g_screenPlaced = false;
+preview::RoomPlane g_previewPlane{};
 XrPosef g_screenPose{{0, 0, 0, 1}, {0, 0, 0}};
 uint32_t g_hudSwapW = 0, g_hudSwapH = 0;
 int64_t g_swapFormat = 0; // the format create_swapchains picked (lazy HUD create)
@@ -326,12 +330,14 @@ std::atomic<int> g_poseLag{1};
 // "POSETAG frame-indexed" approach). Off = the old fixed-lag choice above.
 struct PoseGen {
     uint32_t id = 0;
+    uint64_t locatedMs = 0;
     XrView v[2] = {{XR_TYPE_VIEW}, {XR_TYPE_VIEW}};
     bool valid = false;
 };
 constexpr uint32_t kPoseGens = 16;
 PoseGen g_poseGens[kPoseGens];
 std::mutex g_poseGenMutex;
+uint32_t g_newestLocatedGen{}; // protected by g_poseGenMutex
 uint32_t g_poseGenCounter = 0;
 uint32_t g_headPoseGen = 0;             // under g_poseMutex, with g_headPose
 std::atomic<bool> g_exactPoseTag{true};
@@ -3342,7 +3348,7 @@ void on_present_begin(IDXGISwapChain* swapchain) {
     }
     if (g_runtimeRecenterPending && g_frameState.predictedDisplayTime >= g_runtimeRecenterAt) {
         g_runtimeRecenterPending = false;
-        g_panelPlaced = g_hudPlaced = g_screenPlaced = false;
+        g_panelPlaced = g_hudPlaced = g_screenPlaced = false; g_previewPlane.reset();
         g_runtimeRecenters.fetch_add(1, std::memory_order_relaxed);
     }
     tPhase = phase_now();
@@ -3388,7 +3394,7 @@ void on_present_begin(IDXGISwapChain* swapchain) {
                     const float dy = sl.pose.position.y - s_last.position.y;
                     const float dz = sl.pose.position.z - s_last.position.z;
                     if (dot < 0.97f || dx * dx + dy * dy + dz * dz > 0.25f) {
-                        g_panelPlaced = g_hudPlaced = g_screenPlaced = false;
+                        g_panelPlaced = g_hudPlaced = g_screenPlaced = false; g_previewPlane.reset();
                         g_runtimeRecenters.fetch_add(1, std::memory_order_relaxed);
                         BVR_LOG("xr: head jumped %.0f deg / %.2f m in one frame - treated as a runtime recentre",
                                 2.0f * acosf(dot > 1.0f ? 1.0f : dot) * 57.29578f, sqrtf(dx * dx + dy * dy + dz * dz));
@@ -3433,6 +3439,8 @@ void on_present_begin(IDXGISwapChain* swapchain) {
         std::lock_guard<std::mutex> lk(g_poseGenMutex);
         PoseGen& pg = g_poseGens[thisGen % kPoseGens];
         pg.id = thisGen;
+        pg.locatedMs = GetTickCount64();
+        g_newestLocatedGen = thisGen;
         pg.v[0] = g_views[0];
         pg.v[1] = g_views[1];
         pg.valid = g_viewsValid;
@@ -3917,6 +3925,7 @@ float xr_quat_yaw_deg(float qx, float qy, float qz, float qw) {
 // and lens shape for this display time - submitted as an ordinary full-view projection layer.
 namespace { // same unnamed namespace as destroy_swapchains (it releases these)
 std::atomic<bool> g_screenRoom{true};
+std::atomic<int> g_flatPreview{0};
 std::atomic<bool> g_flatScreenForced{false}; // the adapter says: a full-screen movie is up
 ID3D11Texture2D* g_flatTex = nullptr;
 ID3D11ShaderResourceView* g_flatSrv = nullptr;
@@ -3935,17 +3944,7 @@ void screen_room_release() {
 
 // p_clip for a LOCAL-space point seen by one located eye (OpenXR: -Z forward, +Y up).
 void eye_clip(const XrView& v, const float p[3], float out[4]) {
-    const XrPosef& e = v.pose;
-    const float d[3] = {p[0] - e.position.x, p[1] - e.position.y, p[2] - e.position.z};
-    float le[3];
-    bvr::xrmath::quat_rotate(-e.orientation.x, -e.orientation.y, -e.orientation.z, e.orientation.w, d, le);
-    const float tl = tanf(v.fov.angleLeft), tr = tanf(v.fov.angleRight);
-    const float tu = tanf(v.fov.angleUp), td = tanf(v.fov.angleDown);
-    const float w = -le[2];
-    out[0] = (2.0f * le[0] - (tr + tl) * w) / (tr - tl);
-    out[1] = (2.0f * le[1] - (tu + td) * w) / (tu - td);
-    out[2] = 0.5f * w; // inside 0..w exactly when in front of the eye
-    out[3] = w;
+    preview::clip(v,p,out);
 }
 
 // Draws the flat frame onto the room screen in both eye swapchains. false = not drawn (fall
@@ -3954,10 +3953,12 @@ void eye_clip(const XrView& v, const float p[3], float out[4]) {
 bool flat_copy(ID3D11Texture2D* backbuffer) {
     D3D11_TEXTURE2D_DESC bd{};
     backbuffer->GetDesc(&bd);
+    const auto formats=gfx::encoded_screen_formats(bd.Format,static_cast<DXGI_FORMAT>(g_swapFormat));
     if (g_flatTex) {
         D3D11_TEXTURE2D_DESC fd{};
         g_flatTex->GetDesc(&fd);
-        if (fd.Width != bd.Width || fd.Height != bd.Height) {
+        D3D11_SHADER_RESOURCE_VIEW_DESC view{};if(g_flatSrv)g_flatSrv->GetDesc(&view);
+        if (fd.Width != bd.Width || fd.Height != bd.Height || fd.Format!=formats.resource||view.Format!=formats.view) {
             g_flatSrv->Release(); g_flatSrv = nullptr;
             g_flatTex->Release(); g_flatTex = nullptr;
         }
@@ -3971,10 +3972,9 @@ bool flat_copy(ID3D11Texture2D* backbuffer) {
         td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
         td.CPUAccessFlags = 0;
         td.MiscFlags = 0;
-        if (td.Format == DXGI_FORMAT_R8G8B8A8_UNORM || td.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB)
-            td.Format = DXGI_FORMAT_R8G8B8A8_TYPELESS; // viewed with the eye images' own format
+        td.Format=formats.resource;
         D3D11_SHADER_RESOURCE_VIEW_DESC sd{};
-        sd.Format = static_cast<DXGI_FORMAT>(g_swapFormat);
+        sd.Format=formats.view;
         sd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
         sd.Texture2D.MipLevels = 1;
         if (FAILED(g_device->CreateTexture2D(&td, nullptr, &g_flatTex)) ||
@@ -4021,6 +4021,17 @@ bool screen_room_render(ID3D11Texture2D* backbuffer, const XrPosef& screen, floa
         world[c][1] = screen.position.y + r[1];
         world[c][2] = screen.position.z + r[2];
     }
+    const int previewMode=g_flatPreview.load(std::memory_order_relaxed);
+    if(previewMode) {
+        D3D11_TEXTURE2D_DESC source{};backbuffer->GetDesc(&source);
+        // A distant screen anchored ONCE in LOCAL space. Its corners must not
+        // follow current eye poses: only projection through those poses changes.
+        if(g_state!=XR_SESSION_STATE_FOCUSED || !source.Height)return false;
+        const bool placing=!g_previewPlane.valid || g_previewPlane.width!=source.Width || g_previewPlane.height!=source.Height || g_previewPlane.fill!=(previewMode==2);
+        if(!g_previewPlane.place(g_views,source.Width,source.Height,previewMode==2))return false;
+        if(placing)BVR_LOG("xr: distant screen anchored in LOCAL space (100 m, %s); head motion changes only the viewing angle",previewMode==2?"fill":"fit");
+        memcpy(world,g_previewPlane.world,sizeof(world));
+    }
     flush_held_left(true, "room screen");
     for (int e = 0; e < 2; ++e) {
         uint32_t idx = 0;
@@ -4034,13 +4045,22 @@ bool screen_room_render(ID3D11Texture2D* backbuffer, const XrPosef& screen, floa
             float clip[4][4];
             for (int c = 0; c < 4; ++c) eye_clip(g_views[e], world[c], clip[c]);
             ok = rtv && bvr::blit::screen_in_eye(g_context, rtv, g_swapW, g_swapH, g_flatSrv, clip);
+            const int eyeBit=1<<e;
+            if(ok && (g_eyeSaveMask.load(std::memory_order_relaxed)&eyeBit)) {
+                wchar_t path[MAX_PATH];
+                swprintf_s(path,L"%s\\%s.bmp",g_eyeSaveDir,e==0?L"eye_left":L"eye_right");
+                if(bvr::gfx_hud::save_texture_bmp(g_context,g_images[e][idx].texture,path))
+                    g_eyeSaveMask.fetch_and(~eyeBit,std::memory_order_relaxed);
+            }
         }
         XrSwapchainImageReleaseInfo ri{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
         release_swapchain_image(g_swapchains[e], &ri);
         if (!ok) return false;
     }
-    if (g_screenRoomFrames.fetch_add(1) == 0)
-        BVR_LOG("xr: room screen live - flat screens drawn into both eyes as a screen hanging in the room");
+    if (g_screenRoomFrames.fetch_add(1) == 0) {
+        if(previewMode)BVR_LOG("xr: flat preview live (%s) - room-fixed distant screen, full-FOV projection carrier",previewMode==2?"fill":"fit");
+        else BVR_LOG("xr: room screen live - flat screens drawn into both eyes as a screen hanging in the room");
+    }
     return true;
 }
 
@@ -4048,6 +4068,7 @@ bool screen_room_render(ID3D11Texture2D* backbuffer, const XrPosef& screen, floa
 
 // Batman City DLSS (DLSS_PLAN.md): an adapter may take over the eye copy (send the picture through the helper).
 std::atomic<EyeCaptureHook> g_eyeCaptureHook{nullptr};
+std::atomic<EyeSynthOverlayHook> g_eyeSynthOverlayHook{nullptr};
 std::atomic<EyeSynthHook> g_eyeSynthHook{nullptr}; // AFW: builds the undrawn eye (set_eye_synth_hook)
 
 std::atomic<uint32_t> g_stretches{0};
@@ -4064,7 +4085,8 @@ bool capture_frame(int eye, uint32_t index, ID3D11Texture2D* backbuffer, bool ma
         if (h(g_context, eye, dst, backbuffer)) return false;
     D3D11_TEXTURE2D_DESC bd{};
     backbuffer->GetDesc(&bd);
-    if (bd.Width == g_swapW && bd.Height == g_swapH) {
+    const bool rgbaFamily=bd.Format==DXGI_FORMAT_R8G8B8A8_UNORM||bd.Format==DXGI_FORMAT_R8G8B8A8_UNORM_SRGB||bd.Format==DXGI_FORMAT_R8G8B8A8_TYPELESS;
+    if (bd.Width == g_swapW && bd.Height == g_swapH && rgbaFamily) {
         g_context->CopyResource(dst, backbuffer);
         return false;
     }
@@ -4374,18 +4396,25 @@ void on_present_end(IDXGISwapChain* swapchain) {
                     int64_t tCap = phase_now();
                     deferred = capture_frame(target, index, backbuffer, pairHold && srFrame && target == 0);
                     phase_record(kPhCapture, tCap);
+                    // Complete deferred LEFT before RIGHT evidence is recorded
+                    // or its acquired image is released. The adapter refreshes
+                    // the pending LEFT snapshot after DLSS+HUD, preserving pairing.
+                    if(srFrame&&!afwFrame&&target==1)flush_held_left(false,nullptr);
+                    if(srFrame&&!afwFrame)
+                        bvr::stereo_history::eye(g_context,target,g_images[target][index].texture,g_srPopGen,false);
                     {
                         const int m = g_eyeSaveMask.load(std::memory_order_relaxed);
                         const int eyeBit = srFrame ? (1 << srEye) : 3;
-                        if ((m & eyeBit) && !deferred) { // a held left eye is saved when it is written
+                        if ((m & eyeBit) && !deferred && !afwFrame && (srFrame || !g_screenRoom.load())) { // room renderer saves the COMPOSED eyes below
                             wchar_t path[MAX_PATH];
                             swprintf_s(path, L"%s\\%s.bmp", g_eyeSaveDir,
                                        srFrame ? (srEye == 0 ? L"eye_left" : L"eye_right") : L"screen");
                             // Headset images larger than the frame (DLSS): save what the headset shows.
                             D3D11_TEXTURE2D_DESC sbd{};
                             backbuffer->GetDesc(&sbd);
-                            ID3D11Texture2D* shown = sbd.Width == g_swapW && sbd.Height == g_swapH
-                                                         ? backbuffer : g_images[target][index].texture;
+                            // Capture the final eye even when source and XR sizes match;
+                            // DLSS/HUD hooks may have changed the pixels without a resize.
+                            ID3D11Texture2D* shown = g_images[target][index].texture;
                             bvr::gfx_hud::save_texture_bmp(g_context, shown, path);
                             g_eyeSaveMask.fetch_and(~eyeBit, std::memory_order_relaxed);
                         }
@@ -4407,6 +4436,13 @@ void on_present_end(IDXGISwapChain* swapchain) {
                             const EyeSynthHook sh = g_eyeSynthHook.load(std::memory_order_relaxed);
                             const bool warped = sh && sh(g_context, target, drawn, other);
                             if (!warped) g_context->CopyResource(other, drawn); // flat, never a stale eye
+                            if(const auto post=g_eyeSynthOverlayHook.load())post(g_context,target,drawn,other);
+                            bvr::stereo_history::eye(g_context,target,drawn,g_srPopGen,true,warped);
+                            bvr::stereo_history::eye(g_context,o,other,g_srPopGen,true,warped);
+                            if(g_eyeSaveMask.load()&(1<<target)){
+                                wchar_t path[MAX_PATH];swprintf_s(path,L"%s\\%s.bmp",g_eyeSaveDir,target?L"eye_right":L"eye_left");
+                                bvr::gfx_hud::save_texture_bmp(g_context,drawn,path);g_eyeSaveMask.fetch_and(~(1<<target));
+                            }
                             (warped ? g_afwWarped : g_afwFlat).fetch_add(1, std::memory_order_relaxed);
                             afwOther = o;
                             const int m = g_eyeSaveMask.load(std::memory_order_relaxed);
@@ -4453,15 +4489,20 @@ void on_present_end(IDXGISwapChain* swapchain) {
                     XrView exactViews[2];
                     if (g_exactPoseTag.load(std::memory_order_relaxed) && g_srPopGen) {
                         bool found = false;
+                        uint64_t locatedMs{};uint32_t newest{};
                         {
                             std::lock_guard<std::mutex> lk(g_poseGenMutex);
                             const PoseGen& pg = g_poseGens[g_srPopGen % kPoseGens];
+                            newest=g_newestLocatedGen;
                             if (pg.id == g_srPopGen && pg.valid) {
+                                locatedMs=pg.locatedMs;
                                 exactViews[0] = pg.v[0];
                                 exactViews[1] = pg.v[1];
                                 found = true;
                             }
                         }
+                        static uint64_t lastAgeLog{};const auto ageNow=GetTickCount64();
+                        if(ageNow-lastAgeLog>=5000){lastAgeLog=ageNow;BVR_LOG("xr: image-pose age %llu ms, image generation %u newest %u, exact tag %s; age includes engine/GPU queue, not measured headset latency",locatedMs?ageNow-locatedMs:0,g_srPopGen,newest,found?"matched":"MISSING");}
                         if (found) {
                             gen = exactViews;
                             g_exactTagHits.fetch_add(1, std::memory_order_relaxed);
@@ -4542,8 +4583,8 @@ void on_present_end(IDXGISwapChain* swapchain) {
                         g_auditTanH.store(tanClaimH, std::memory_order_relaxed);
                         g_auditTanV.store(tanClaimV, std::memory_order_relaxed);
                         g_auditFovSrc.store(hfovSrc, std::memory_order_relaxed);
-                        BVR_LOG("xr: fovaudit submit tanH=%.6f tanV=%.6f (hfov %.2f deg, "
-                                "src=%s, swap %ux%u, symmetric both eyes)",
+                        BVR_LOG("xr: fovaudit symmetric baseline tanH=%.6f tanV=%.6f (hfov %.2f deg, "
+                                "src=%s, swap %ux%u; stereo may override with runtime asymmetric angles)",
                                 tanClaimH, tanClaimV, hfovDeg, kFovSrcNames[hfovSrc],
                                 g_swapW, g_swapH);
                     }
@@ -4592,6 +4633,11 @@ void on_present_end(IDXGISwapChain* swapchain) {
                                                   g_eyeFovAngles[eye][1].load(std::memory_order_relaxed),
                                                   g_eyeFovAngles[eye][2].load(std::memory_order_relaxed),
                                                   g_eyeFovAngles[eye][3].load(std::memory_order_relaxed)};
+                    }
+                    static unsigned actualFovLogs=0;
+                    if(stereo&&actualFovLogs++<3)for(int e=0;e<2;++e){
+                        const auto& f=projViews[e].fov;
+                        BVR_LOG("xr: actual stereo submission eye %d FOV L/R/U/D %.2f %.2f %.2f %.2f deg",e,f.angleLeft*57.29578f,f.angleRight*57.29578f,f.angleUp*57.29578f,f.angleDown*57.29578f);
                     }
                     // s51: bank the edge-telemetry snapshot (armed only; the
                     // game-thread sampler copies it out - see the header).
@@ -4649,7 +4695,7 @@ void on_present_end(IDXGISwapChain* swapchain) {
                     proj.viewCount = 2;
                     proj.views = projViews;
                     layers[0] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&proj);
-                    g_screenPlaced = false; // the flat screen re-anchors next time it shows
+                    g_screenPlaced = false; g_previewPlane.reset(); // re-anchor when returning from native world
                     g_lastLayer = 2;
                     if (!g_loggedFirstProjection.exchange(true))
                         BVR_LOG("xr: first projection-layer frame (claimed hfov %.1f deg)",
@@ -5774,7 +5820,7 @@ void set_panel_texture(ID3D11Texture2D* tex) {
     if (!tex) g_panelPlaced = false; // re-place in front of the head on the next open
     g_panelTex = tex;
 }
-void recenter_panel() { g_panelPlaced = false; g_hudPlaced = false; g_screenPlaced = false; }
+void recenter_panel() { g_panelPlaced = false; g_hudPlaced = false; g_screenPlaced = false; g_previewPlane.reset(); }
 void set_repeat_lock(int fps) {
     const int v = (fps == 45 || fps == 40 || fps == 30) ? fps : 0;
     if (g_repeatLockFps.exchange(v) != v) BVR_LOG("xr: repeat the frame %s", v ? "on" : "off");
@@ -5793,7 +5839,13 @@ uint32_t runtime_recenter_count() { return g_runtimeRecenters.load(std::memory_o
 bool runtime_is_steamvr() { return strstr(g_runtimeName, "SteamVR") != nullptr; } // SVRGLOW
 void set_screen_room(bool on) { g_screenRoom.store(on, std::memory_order_relaxed); }
 bool screen_room() { return g_screenRoom.load(std::memory_order_relaxed); }
+void set_flat_preview(int mode) {
+    g_flatPreview.store(std::clamp(mode,0,2));g_screenPlaced=false;g_previewPlane.reset();
+    BVR_LOG("xr: flat preview %s (native camera stereo unchanged)",mode==2?"full view":mode==1?"aspect fit":"room screen");
+}
+int flat_preview() {return g_flatPreview.load(std::memory_order_relaxed);}
 void set_eye_capture_hook(EyeCaptureHook h) { g_eyeCaptureHook.store(h, std::memory_order_relaxed); }
+void set_eye_synth_overlay_hook(EyeSynthOverlayHook h){g_eyeSynthOverlayHook.store(h);}
 void set_eye_synth_hook(EyeSynthHook h) { g_eyeSynthHook.store(h, std::memory_order_relaxed); }
 void sr_set_present_afw(bool afw) { g_srDirectAfw.store(afw, std::memory_order_release); }
 void afw_counts(uint32_t* warped, uint32_t* flat) {
@@ -6320,6 +6372,8 @@ uint32_t runtime_recenter_count() { return 0; }
 bool runtime_is_steamvr() { return false; }
 void set_screen_room(bool) {}
 bool screen_room() { return false; }
+void set_flat_preview(int) {}
+int flat_preview() {return 0;}
 void set_vignette(float) {}
 void set_vignette_look(float, float, float) {}
 void get_vignette_look(float* s, float* c, float* r) { if (s) *s = 0; if (c) *c = 0; if (r) *r = 0; }

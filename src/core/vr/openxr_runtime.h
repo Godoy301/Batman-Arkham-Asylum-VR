@@ -338,6 +338,10 @@ void save_eye_pictures(const wchar_t* dir); // next left + right eye frames -> d
 uint32_t runtime_recenter_count();
 void set_screen_room(bool on);
 bool screen_room();
+// Development flat preview, using the current views and a common distant plane.
+// mode 0 = room screen; 1 = aspect-fit; 2 = fill (uniform crop). No camera stereo.
+void set_flat_preview(int mode);
+int flat_preview();
 void set_vignette(float amount);
 void set_vignette_look(float strength, float clearDeg, float rampDeg);
 void get_vignette_look(float* strength, float* clearDeg, float* rampDeg);
@@ -379,6 +383,8 @@ void held_left_counts(uint32_t* done, uint32_t* early);
 // eye goes to both (flat, never a stale eye). Render thread, the game's device.
 using EyeSynthHook = bool (*)(ID3D11DeviceContext* ctx, int drawnEye, ID3D11Texture2D* drawn, ID3D11Texture2D* otherDst);
 void set_eye_synth_hook(EyeSynthHook h);
+using EyeSynthOverlayHook = void (*)(ID3D11DeviceContext*,int,ID3D11Texture2D*,ID3D11Texture2D*);
+void set_eye_synth_overlay_hook(EyeSynthOverlayHook h);
 // Render thread, beside sr_set_present_eye: the next present is an AFW frame (no pair hold, both eyes submitted).
 void sr_set_present_afw(bool afw);
 void afw_counts(uint32_t* warped, uint32_t* flat); // AFW pairs submitted with a warped eye / the drawn eye in both

@@ -1,5 +1,5 @@
 #pragma once
-// Batman City DLSS hand-off (DLSS_PLAN.md): the 32-bit game and the 64-bit helper (aa_dlss64.exe) share this block
+// Asylum DLSS hand-off, adapted from City: the x86 game and x64 helper share this block.
 // (named file mapping kMapName) plus one texture set per eye (legacy shared handles + keyed mutexes: key 0 = the
 // game holds it, key 1 = the helper holds it). Both sides compile this header; keep it plain and fixed-size.
 
@@ -10,7 +10,7 @@ namespace bcdlss {
 constexpr wchar_t kMapName[] = L"Local\\BatmanAsylumDLSS_v1";
 constexpr wchar_t kReqName[] = L"Local\\BatmanAsylumDLSS_req";
 constexpr wchar_t kDoneName[] = L"Local\\BatmanAsylumDLSS_done";
-constexpr uint32_t kVersion = 5;
+constexpr uint32_t kVersion = 8;
 
 enum Tex : int { kColor = 0, kDepth = 1, kMotion = 2, kOut = 3, kTexCount = 4 };
 
@@ -70,6 +70,8 @@ struct Shared {
         volatile uint32_t answered;  // helper: written before fenceOut is signalled
     } req[2];
     uint32_t fenceWaitTimeouts;      // helper: fenceIn waits that hit their limit (served anyway: keyed mutex order)
+    int32_t evaluatedMode;           // legacy request: successful NGX mode; copy/failure always zero
+    int32_t driverPreset;            // read-only NGX runtime observation; 0 = no preset override reported
 };
 #pragma pack(pop)
 

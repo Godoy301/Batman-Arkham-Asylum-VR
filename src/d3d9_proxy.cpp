@@ -31,4 +31,6 @@ extern "C" void WINAPI D3DPERF_SetRegion(D3DCOLOR c,LPCWSTR n) {auto f=original<
 extern "C" BOOL WINAPI D3DPERF_QueryRepeatFrame() {auto f=original<BOOL(WINAPI*)()>("D3DPERF_QueryRepeatFrame");return f?f():FALSE;}
 extern "C" void WINAPI D3DPERF_SetOptions(DWORD o) {auto f=original<void(WINAPI*)(DWORD)>("D3DPERF_SetOptions");if(f)f(o);}
 extern "C" DWORD WINAPI D3DPERF_GetStatus() {auto f=original<DWORD(WINAPI*)()>("D3DPERF_GetStatus");return f?f():0;}
+// The installer and uninstaller recognise our d3d9.dll by this text (another mod may use the same name).
+extern "C" __declspec(dllexport) const char AA_ProxyMarker[]="[batman_asylum-proxy]";
 BOOL WINAPI DllMain(HINSTANCE h,DWORD why,LPVOID) {if(why==DLL_PROCESS_ATTACH)DisableThreadLibraryCalls(h);return TRUE;}
