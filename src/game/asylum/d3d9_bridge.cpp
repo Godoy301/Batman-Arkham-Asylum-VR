@@ -520,7 +520,8 @@ bool adopt(IDirect3DDevice9* dev) {
     if(managed9::native_device(dev)){
         if(!native9::adopt(dev))return false;
         if(!eleven){eleven=native9::device();context=native9::context();D3DDEVICE_CREATION_PARAMETERS cp{};dev->GetCreationParameters(&cp);gameWindow=cp.hFocusWindow;
-            BVR_LOG("[aa bridge] NATIVE9EX -> D3D11 same-adapter shared GPU textures active; NO 9On12 / 11On12 / D3D12 rendering translation");}
+            BVR_LOG("[aa bridge] NATIVE9EX -> D3D11 same-adapter shared GPU textures active; NO 9On12 / 11On12 / D3D12 rendering translation");
+            dlss::prewarm(eleven.Get());} // PIMAXSTART: the helper starts now, during logos/menus, never at the first 3D frame
         return true;
     }
     if(nine) return elevenOn12!=nullptr;

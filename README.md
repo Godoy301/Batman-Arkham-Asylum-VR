@@ -76,6 +76,7 @@ from Steam still plays the normal flat game.
 | A window says the headset could not be asked for its picture size | Connect the headset to your PC VR software first, then start the shortcut again. |
 | The installer stops: "the game has not made its settings yet" | Start the game once from Steam, wait for the main menu, quit, run the installer again. |
 | The installer or launcher says the game is a different version | The mod works only with the Steam Game of the Year Edition. |
+| Pimax (or other VR software with no 32-bit OpenXR runtime): nothing in the headset | The shortcut then uses SteamVR's 32-bit runtime by itself: install SteamVR. Do not run Steam or the game as administrator. |
 | Low frame rate | VR menu: lower the render size (VR resolution), or choose a faster DLSS setting. |
 
 ## Removing it

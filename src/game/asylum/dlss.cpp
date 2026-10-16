@@ -53,9 +53,13 @@ struct Set {
 };Set sets[2];
 float halton(unsigned i,unsigned base){float f=1,r=0;while(i){f/=float(base);r+=f*(i%base);i/=base;}return r;}
 unsigned jitter_period(unsigned output,unsigned input){const double ratio=double(output)/input;return std::clamp(unsigned(std::ceil(8*ratio*ratio)),8u,128u);}
-bool start(ID3D11Device* d){
- if(shared)return !fault&&shared->helperReady&&shared->ngxState==1;
- if(initTried)return false;initTried=true;device=d;d->GetImmediateContext(&context);
+// PIMAXSTART (Pimax Crystal player log 2026-10-17): start() used to wait here, on the render thread, at the FIRST 3D
+// frame, until the helper reported NGX ready - 6.5 s on that PC. The Pimax runtime took the headset away from the
+// "hung" game (FOCUSED -> VISIBLE) and the player saw nothing more. City/Origins never wait: the helper now starts in
+// the background as soon as the game's device exists (prewarm), and each frame only asks whether it is ready yet.
+ULONGLONG startedAt{};bool readyLogged{};
+bool spawn(ID3D11Device* d){
+ device=d;d->GetImmediateContext(&context);
  wchar_t path[MAX_PATH]{},folder[MAX_PATH]{};
  if(fixtureHelper[0])wcscpy_s(path,fixtureHelper);
  else{GetModuleFileNameW(nullptr,path,MAX_PATH);auto* slash=wcsrchr(path,L'\\');if(!slash)return false;wcscpy_s(slash+1,MAX_PATH-(slash+1-path),L"AsylumVR\\DLSS\\aa_dlss64.exe");}
@@ -77,12 +81,23 @@ bool start(ID3D11Device* d){
  swprintf_s(command,L"\"%s\" --session %s",path,session);
  if(!CreateProcessW(path,command,nullptr,nullptr,FALSE,CREATE_SUSPENDED|CREATE_NO_WINDOW,nullptr,folder,&si,&pi))return false;
  if(!AssignProcessToJobObject(job,pi.hProcess)){TerminateProcess(pi.hProcess,1);CloseHandle(pi.hThread);CloseHandle(pi.hProcess);return false;}
- helperProcess=pi.hProcess;ResumeThread(pi.hThread);CloseHandle(pi.hThread);
- const auto deadline=GetTickCount64()+5000;
- while(!shared->helperReady&&GetTickCount64()<deadline&&WaitForSingleObject(helperProcess,0)==WAIT_TIMEOUT)Sleep(2);
- BVR_LOG("[aa DLSS] helper pid %lu, ready %u NGX %d; input ownership finishes on CPU",pi.dwProcessId,shared->helperReady,shared->ngxState);
- return shared->helperReady&&shared->ngxState==1;
+ helperProcess=pi.hProcess;ResumeThread(pi.hThread);CloseHandle(pi.hThread);startedAt=GetTickCount64();
+ BVR_LOG("[aa DLSS] helper pid %lu started in the background; the game never waits for it",pi.dwProcessId);
+ return true;
 }
+// 1 ready, 0 still starting (stock picture meanwhile), -1 failed (stock picture until restart). Never blocks.
+int start(ID3D11Device* d){
+ if(!shared){if(initTried)return -1;initTried=true;if(!spawn(d))return -1;}
+ if(fault)return -1;
+ MemoryBarrier();
+ if(shared->helperReady){
+  if(!readyLogged){readyLogged=true;BVR_LOG("[aa DLSS] helper ready after %llu ms, NGX %d; input ownership finishes on CPU",GetTickCount64()-startedAt,shared->ngxState);}
+  return shared->ngxState==1?1:-1;
+ }
+ if(!helperProcess||WaitForSingleObject(helperProcess,0)!=WAIT_TIMEOUT)return -1;
+ return GetTickCount64()-startedAt<60000?0:-1; // a first NGX start can be slow (driver model download); a minute at most
+}
+std::atomic<unsigned> helperWaits{};
 bool compute_shader(){
  if(shader&&constants)return true;
  const char source[]=
@@ -177,7 +192,10 @@ bool complete_left(ID3D11Texture2D* output,bool keep){
 bool evaluate(const native::Camera& c,ID3D11Texture2D* scene,ID3D11ShaderResourceView* depth,ID3D11Texture2D* output,int selected,bool deferLeftAllowed){
  if(c.afw&&pending[0].valid)complete_left(output,false);
  if(c.eye==1&&pending[0].valid&&(pending[0].mode!=selected||pending[0].epoch!=resetEpoch.load()))return false;
- ComPtr<ID3D11Device> dev;scene->GetDevice(&dev);if(!start(dev.Get())){failure("helper unavailable or NGX not ready");return false;}
+ ComPtr<ID3D11Device> dev;scene->GetDevice(&dev);
+ const int helper=start(dev.Get());
+ if(helper<0){failure("helper unavailable or NGX not ready");return false;}
+ if(!helper){++helperWaits;return false;} // PIMAXSTART: still starting - this eye keeps the stock picture, no wait
  D3D11_TEXTURE2D_DESC rd{},od{};scene->GetDesc(&rd);output->GetDesc(&od);
  // The launcher's mode determines the engine's render cost. NGX reconstructs
  // to the requested output, never to input*1.5 above the headset by accident.
@@ -252,7 +270,8 @@ void shutdown(){
  for(auto* h:{&mapping,&request,&done})if(*h){CloseHandle(*h);*h=nullptr;}
 }
 void status_line(char* out,unsigned n){snprintf(out,n,"requested=%d active=%u fault=%u evaluations=%u fallback=%u noDepth=%u ngx=%d evaluatedMode=%d input=%ux%u output=%ux%u cameraMotionOnly=1 driverPreset=%d jitterPhases=%u overlap=%u sync=%d queuedLeft=%u blockedWaits=%u blockedAvgMs=%.3f fenceTimeouts=%u",mode(),active(),fault.load(),evaluations.load(),fallbacks.load(),noDepth.load(),shared?shared->ngxState:0,shared?shared->evaluatedMode:0,shared?shared->renderW:0,shared?shared->renderH:0,shared?shared->outW:0,shared?shared->outH:0,shared?shared->driverPreset:0,sets[0].ow&&sets[0].rw?jitter_period(sets[0].ow,sets[0].rw):0,overlap(),shared?shared->syncMode:0,queuedLeft,pairWaits,pairWaits?pairWaitTotal/pairWaits:0,shared?shared->fenceWaitTimeouts:0);}
-void status(){char line[768]{};status_line(line,sizeof(line));BVR_LOG("[aa DLSS] %s completionTimeouts=%u helperGpuMs=%.3f",line,timeouts.load(),shared?shared->gpuMs:0);}
+void status(){char line[768]{};status_line(line,sizeof(line));BVR_LOG("[aa DLSS] %s completionTimeouts=%u helperGpuMs=%.3f helperStartingFrames=%u",line,timeouts.load(),shared?shared->gpuMs:0,helperWaits.load());}
+void prewarm(ID3D11Device* d){if(d&&mode()&&!initTried)start(d);}
 void draw_ui(){
  const char* modes[]={"Off","DLAA","DLSS Ultra Quality","DLSS Quality","DLSS Balanced","DLSS Performance"};int selected=mode();if(ImGui::Combo("Anti-aliasing / upscale",&selected,modes,6))set_mode(selected);
  ImGui::Text("DLSS: %s",!mode()?"off; stock rendering":active()?"evaluating independent eye histories":fault?"failed; stock rendering, restart required":"waiting for native scene depth");
@@ -268,6 +287,11 @@ bool fixture(ID3D11DeviceContext* ctx,ID3D11Texture2D* scene,ID3D11ShaderResourc
  if(jitter_period(64,64)!=8||jitter_period(2284,1522)!=19||jitter_period(2284,1322)!=24)return false;
  overlapEnabled=false; // Keep the synchronous regression, then test real shared-fence overlap below.
  wcscpy_s(fixtureHelper,path);fault=false;requested=1;D3D11_TEXTURE2D_DESC d{};scene->GetDesc(&d);ComPtr<ID3D11Device> dev;ctx->GetDevice(&dev);ComPtr<ID3D11Texture2D> output;
+ // PIMAXSTART: the helper starts without blocking; the fixture itself waits for it (the game never does).
+ if(!shared)initTried=false; // the device's prewarm looked beside the test exe, before this helper path was set
+ int helperState=start(dev.Get());const auto readyBy=GetTickCount64()+15000;
+ while(!helperState&&GetTickCount64()<readyBy){Sleep(5);helperState=start(dev.Get());}
+ printf("DLSS helper background start: %s\n",helperState>0?"ready":helperState<0?"FAILED":"timed out");if(helperState<=0)return false;
  if(FAILED(dev->CreateTexture2D(&d,nullptr,&output)))return false;
  native::Camera camera{};camera.valid=true;camera.width=d.Width;camera.height=d.Height;camera.generation=123;camera.view.v[0][0]=camera.view.v[1][1]=camera.view.v[2][2]=camera.view.v[3][3]=1;
  camera.projection.v[0][0]=camera.projection.v[1][1]=camera.projection.v[2][3]=1;camera.projection.v[2][2]=1.001f;camera.projection.v[3][2]=-.1f;

@@ -17,15 +17,31 @@ New-Item -ItemType Directory -Path $data -Force | Out-Null
 . (Join-Path $PSScriptRoot 'Graphics-Profile.ps1')
 . (Join-Path $PSScriptRoot 'Render-Size.ps1')
 if(Test-Path -LiteralPath $journal) {Restore-AsylumProfile (Get-Content -LiteralPath $journal -Raw | ConvertFrom-Json);Remove-Item -LiteralPath $journal}
-if($SteamVR) {
+function Find-SteamVR32 {
  $steam=(Get-ItemProperty 'HKCU:/SOFTWARE/Valve/Steam' -ErrorAction SilentlyContinue).SteamPath
- $candidates=@((Join-Path (Split-Path $game -Parent) 'SteamVR/steamxr_win32.json'))
+ $candidates=@()
+ # City SVRACTIVE: first the SteamVR install SteamVR itself treats as active (a player with two SteamVR installs).
+ try {$active=(Get-Content -Raw (Join-Path $env:LOCALAPPDATA 'openvr/openvrpaths.vrpath') | ConvertFrom-Json).runtime[0]
+      if($active) {$candidates+=Join-Path $active 'steamxr_win32.json'}} catch {}
+ $candidates+=Join-Path (Split-Path $game -Parent) 'SteamVR/steamxr_win32.json'
  if($steam) {$candidates+=(Join-Path $steam 'steamapps/common/SteamVR/steamxr_win32.json')}
- $runtime=$candidates | Where-Object {Test-Path -LiteralPath $_} | Select-Object -First 1
+ $candidates | Where-Object {Test-Path -LiteralPath $_} | Select-Object -First 1
+}
+if($SteamVR) {
+ $runtime=Find-SteamVR32
  if(!$runtime) {throw 'SteamVR was not found. Install SteamVR from Steam and start it once, then try again.'}
  $env:XR_RUNTIME_JSON=$runtime
 }
 $recommend=& (Join-Path $bin 'aa_xr_config32.exe')
+# Exit 4 = the PC's VR software has no 32-bit runtime (Pimax): use SteamVR's 32-bit one for this launch only.
+if($LASTEXITCODE -eq 4 -and !$SteamVR) {
+ $runtime=Find-SteamVR32
+ if($runtime) {
+  Write-Host 'Your VR software has no 32-bit OpenXR runtime - using SteamVR''s for this launch.'
+  $env:XR_RUNTIME_JSON=$runtime
+  $recommend=& (Join-Path $bin 'aa_xr_config32.exe')
+ }
+}
 if($LASTEXITCODE -ne 0) {throw 'The headset could not be asked for its picture size. Start your PC VR software, connect the headset, then start this shortcut again.'}
 $size=$recommend | ConvertFrom-Json
 Add-Type -AssemblyName System.Windows.Forms

@@ -1,3 +1,34 @@
+## RELEASE 0.1.1 - Pimax fixes (PIMAX, 2026-10-17; JJ: "fix all the mods so they work on Pimax correctly, then deploy")
+
+Looked up: workspace tempatman_asylum.log (Pimax player); batman_city BATMAN_CITY_PLAN SVRFALLBACK / SVRACTIVE /
+ELEVATED (2026-10-13 Pimax player: Pimax registers its 64-bit runtime in the 32-bit slot); City/Origins dlss_bridge
+on_eye (helper never waited on: `if (!g_sh->helperReady) return false`); VR_ESSENTIALS §4 (anything that blocks paces
+you), §11; playbook b955f224 09 #runtime-owns-pacing.
+
+Player log (LIVE, Pimax Crystal, 'Pimax OpenXR' 0.1.0 reached in-process, 3880x4592 per eye): menus FOCUSED and
+submitted as the distant screen; first gameplay pair at 17:46:54 -> `xr: image-pose age 6531 ms` -> `[aa DLSS] helper
+pid ..., ready 1` -> session FOCUSED -> VISIBLE 0.2 s later -> no further pairs; player quit 7 s after. dlss.cpp start()
+waited on the render thread for helperReady (5 s loop + NGX) at the FIRST 3D frame; JJ's own A2o log shows the same wait
+at 1.06 s. The Pimax runtime demotes an app that stops presenting for seconds.
+
+Fixes (SOURCE, built, offline):
+1. PIMAXSTART: the helper starts in the background when the native9Ex D3D11 device is adopted (dlss::prewarm); start()
+   never waits (1 ready / 0 starting / -1 failed); a starting helper = stock picture for that eye, no fault, counted as
+   helperStartingFrames in the [aa DLSS] heartbeat; 60 s limit for a slow first NGX start.
+2. SVRFALLBACK port: no 32-bit runtime loadable -> SteamVR's steamxr_win32.json (active install first) for this launch.
+   ELEVATED log line (admin ignores XR_RUNTIME_JSON).
+3. Launcher: aa_xr_config32 exits 4 when no 32-bit runtime can be loaded at all; Launch-VR.ps1 then retries with
+   SteamVR's 32-bit runtime. Before, the launcher refused to start the game on such PCs. A VD runtime with the headset
+   unconnected still exits 2 (no SteamVR switch).
+
+### RELEASE 0.1.1 RESULTS (2026-10-17)
+- OFFLINE: asylum_offline_check native = PASS, incl. "DLSS helper background start: ready" and all DLSS overlap cases.
+- OFFLINE: aa_xr_config32 with XR_RUNTIME_JSON = VD's 64-bit manifest (imitates the Pimax registration) -> exit 4;
+  normal VD 32-bit runtime with no headset -> exit 2. Both launchers parse.
+- Package: changed vs 0.1.0 = batman_asylum.dll, aa_xr_config32.exe, Launch-VR.ps1, version.txt, README (Pimax row);
+  settings = the 0.1.0 zip's aa_rendering.ini.
+- HEADSET pending: JJ (VD) regression check; the Pimax player's report.
+
 ## RELEASE 0.1.0 - first public package (2026-10-14; JJ: "package it up with the same instructions i used for Origins, then make a github repo for it and upload. We'll address the decal shader after")
 Looked up: PACKAGING_GUIDE.md (all; s12 panel tidy + test tools behind one switch, s9 practice install, s3 zip rules);
 Origins RELEASE 0.1.0 (batman_origins/BUILD_PLAN.md, commit 97b9aba: install/*.ps1, tools/make_package.py, README);

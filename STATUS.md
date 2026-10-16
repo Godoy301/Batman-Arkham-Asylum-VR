@@ -2,6 +2,8 @@
 
 README.md is the player page since release 0.1.0; these are the development checkpoints it used to hold.
 
+CURRENT 0.1.1 RELEASED (2026-10-17): Pimax fixes - DLSS helper starts in the background (the 6.5 s first-frame wait made Pimax drop the game), SteamVR 32-bit fallback in mod + launcher. See BUILD_PLAN "RELEASE 0.1.1".
+
 CURRENT 0.1.0 RELEASED (2026-10-14): build A2p + panel tidy, package installer on JJ's game. See BUILD_PLAN "RELEASE 0.1.0". Open: shotgun shells (RE_NOTES A2p effect stepper).
 
 CURRENT A2p INSTALLED (2026-10-14): toolkit effect stepper (panel TESTS "Hide each effect in turn") to name the shell draw. HEADSET pending; RE_NOTES A2p.
