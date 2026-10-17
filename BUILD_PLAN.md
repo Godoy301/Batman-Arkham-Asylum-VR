@@ -1,3 +1,14 @@
+## RELEASE 0.1.2 - Pimax menu / HUD double vision (PIMAX2, 2026-10-17)
+
+Report (via JJ): Pimax player, "the main menu and HUD have double vision with OpenXR" (not with SteamVR). Looked up: VR_ESSENTIALS
+§8 (VD quad layers have no parallax), memory vd-quad-layers-no-parallax, playbook b955f224 09 "Canted displays"; code: every
+runtime-specific branch in openxr_runtime.cpp. The HUD in-eye overlay and the distant menu screen project through each eye's own
+pose (orientation + position) - correct on any runtime, canted or not. The ONE per-eye geometry branch that differs between
+SteamVR and other runtimes: the full-view transition quads (menu fades / backdrop / bats) got VDXR's head-centre correction
+(each eye's quad moved half the eye distance) on every runtime except SteamVR. Pimax places quads from the physical eyes like
+SteamVR, so the correction doubled them. SOURCE fix: the shift applies only when the runtime is VirtualDesktop. VD and SteamVR
+unchanged. City/AK: VD-only already (hud_eyes_on / g_hudEyes). STATIC: offline check PASS. HEADSET pending (Pimax player).
+
 ## RELEASE 0.1.1 - Pimax fixes (PIMAX, 2026-10-17; JJ: "fix all the mods so they work on Pimax correctly, then deploy")
 
 Looked up: workspace tempatman_asylum.log (Pimax player); batman_city BATMAN_CITY_PLAN SVRFALLBACK / SVRACTIVE /
