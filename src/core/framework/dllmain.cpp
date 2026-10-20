@@ -22,7 +22,7 @@ DWORD WINAPI InitThread(LPVOID) {
     GetModuleFileNameW(nullptr, path, MAX_PATH);
     auto* name = wcsrchr(path, L'\\');
     if (_wcsicmp(name ? name + 1 : path, L"ShippingPC-BmGame.exe") != 0) {
-        OutputDebugStringA("[Batman Asylum VR] Unsupported host executable name; VR initialization skipped.\\n");
+        OutputDebugStringA("[Batman Asylum VR] Unsupported host executable name; VR initialization skipped.\n");
         identity.store(2);
         return 0;
     }
@@ -33,7 +33,7 @@ DWORD WINAPI InitThread(LPVOID) {
     if (!stockBuild && !knownJokerPatch) {
         char message[256]{};
         sprintf_s(message,
-                  "[Batman Asylum VR] Unsupported host executable SHA-256: %s; VR initialization skipped.\\n",
+                  "[Batman Asylum VR] Unsupported host executable SHA-256: %s; VR initialization skipped.\n",
                   hash.empty() ? "<hash failed>" : hash.c_str());
         OutputDebugStringA(message);
         identity.store(2);
