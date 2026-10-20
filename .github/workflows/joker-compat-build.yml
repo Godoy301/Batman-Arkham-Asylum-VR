@@ -1,0 +1,37 @@
+name: Joker compatibility Win32 build
+
+on:
+  push:
+    branches:
+      - "compat/joker-dlc-patcher"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-win32:
+    runs-on: windows-2022
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure Win32 build
+        run: cmake -S . -B build-native9 -G "Visual Studio 17 2022" -A Win32
+
+      - name: Build native VR DLL and companion binaries
+        run: cmake --build build-native9 --config Release --parallel
+
+      - name: Run deterministic compatibility tests
+        run: ctest --test-dir build-native9 -C Release --output-on-failure -R "scene_and_canvas_projection|render_size_fits_desktop|opening_movie_identity"
+
+      - name: Upload build artifacts for testing (not a release package)
+        uses: actions/upload-artifact@v4
+        with:
+          name: asylumvr-joker-compat-win32
+          if-no-files-found: error
+          path: |
+            build-native9/Release/batman_asylum.dll
+            build-native9/Release/d3d9.dll
+            build-native9/Release/xinput1_3.dll
+            build-native9/Release/aa_xr_config32.exe
