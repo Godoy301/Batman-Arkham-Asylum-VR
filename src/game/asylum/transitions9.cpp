@@ -130,7 +130,7 @@ bool geometry(IDirect3DDevice9*d,const Draw& draw,Geometry&g){
  for(unsigned i=0;i<n;++i){unsigned v{};if(format==D3DFMT_INDEX16){WORD w;memcpy(&w,indices+i*2,2);v=w;}else if(format==D3DFMT_INDEX32)memcpy(&v,indices+i*4,4);else return false;if(v<minimum||v-minimum>=vertices)return false;g.indices[i]=v-minimum;}return true;
 }
 enum class Kind{other,fade,bat};
-Kind classify(const Geometry&g,const Draw&draw,const Shader&vs,const Shader&ps,const float*m,const float constants[32][4],bool multiply=false,bool continuing=false,float* fade=nullptr){
+Kind classify(const Geometry&g,const Draw&draw,const Shader&vs,const Shader&ps,const float*m,const float constants[32][4],bool multiply=false,bool continuing=false,float* fade=nullptr,bool* blackRectangle=nullptr){
  struct Sample{float x{},y{},dark{-1};};std::vector<Sample>samples(g.points.size());
  float xmin=100,xmax=-100,ymin=100,ymax=-100,maxDark=0,referenceW=0;bool haveW=false;
  for(unsigned at:g.indices){auto&s=samples[at];if(s.dark>=0)continue;const auto&v=g.points[at];float c[4]{},clip[4]{};
@@ -156,7 +156,7 @@ Kind classify(const Geometry&g,const Draw&draw,const Shader&vs,const Shader&ps,c
  double area=0;if(rectangle&&corners==15){for(unsigned tri=0;tri<draw.count;++tri){const unsigned i=draw.type==D3DPT_TRIANGLELIST?tri*3:tri;const auto&a=samples[g.indices[i]],&b=samples[g.indices[i+1]],&c=samples[g.indices[i+2]];if(a.dark>=core&&b.dark>=core&&c.dark>=core)area+=std::fabs(double(b.x-a.x)*(c.y-a.y)-double(b.y-a.y)*(c.x-a.x))*.5;}
   const double box=double(right-left)*(top-bottom);rectangle=box>0&&std::fabs(area-box)<=box*.007;
  }else rectangle=false;
- if(rectangle){if(fade)*fade=maxDark;return continuing&&maxDark>.999f?Kind::bat:Kind::fade;}
+ if(rectangle){if(fade)*fade=maxDark;if(blackRectangle)*blackRectangle=true;return continuing&&maxDark>.999f?Kind::bat:Kind::fade;}
  if(continuing&&draw.count>=8)return Kind::bat;
  const bool coversStage=xmin<=-.9f&&xmax>=.9f&&ymin<=-.65f&&ymax>=.65f;
  // LIVE sweep begins at one edge, before it spans the authored stage:
@@ -164,6 +164,24 @@ Kind classify(const Geometry&g,const Draw&draw,const Shader&vs,const Shader&ps,c
  const bool edgeSweep=draw.count>=128&&maxDark>.999f&&(xmin<-1.2f||xmax>1.2f)&&ymin<-.1f&&ymax>.1f&&ymax-ymin>=.65f;
  if(draw.count>=8&&maxDark>.999f&&(coversStage||edgeSweep))return Kind::bat;
  return Kind::other;
+}
+// UPGRADEBLACK (JJ 2026-10-20: "Going into the upgrades section of the menu ... just shows a completely black screen ...
+// on desktop it's there"; LIVE 18:48:30-18:49:37: batDraws +1 per frame for over a minute with no bat transition). The bat
+// sweep changes its mesh every frame (startup log: 288, 439, 686 ... primitives); a menu's black backdrop / frame matches
+// the same "opaque black, covers the stage" test but repeats one mesh. A bat-classified mesh + placement seen unchanged
+// kStaticFrames times, each within 250 ms of the last, is menu artwork: it stays in the menu, not the full-view bat layer.
+constexpr unsigned kStaticFrames=10;
+bool staticArtwork=true;unsigned staticKept{};
+struct StaticSeen{uint64_t key;unsigned count;ULONGLONG at;};StaticSeen staticSeen[8]{};
+bool static_artwork(const Geometry&g,const Draw&draw,const float*transform,ULONGLONG now){
+ if(!staticArtwork)return false;
+ uint64_t h=1469598103934665603ull;auto mix=[&h](const void*p,size_t n){const BYTE*c=static_cast<const BYTE*>(p);for(size_t i=0;i<n;++i){h^=c[i];h*=1099511628211ull;}};
+ mix(&draw.count,sizeof(draw.count));mix(transform,64);for(const auto&pt:g.points)mix(pt.p,sizeof(pt.p));
+ StaticSeen*slot=nullptr;for(auto&s:staticSeen)if(s.key==h&&s.count&&now-s.at<250){slot=&s;break;}
+ if(!slot){slot=&staticSeen[0];for(auto&s:staticSeen)if(s.at<slot->at)slot=&s;*slot={h,0,now};}
+ slot->at=now;if(++slot->count<kStaticFrames)return false;
+ if(slot->count==kStaticFrames&&staticKept++<8)BVR_LOG("[aa transitions] UPGRADEBLACK: static black menu artwork kept in the menu, not the bat layer: primitives%u vertices%u, unchanged %u times",draw.count,unsigned(g.points.size()),kStaticFrames);
+ return true;
 }
 void geometry_evidence(IDirect3DDevice9*d,const Geometry&g,const Draw&draw,const Shader&vs,const Shader&ps,const float*m,const float constants[32][4],Kind kind){
  static unsigned saved{};static uint64_t keys[16]{};if(fixtureW||saved>=16||g.indices.empty())return;float c[4]{};if(!colour(ps,g.points[g.indices.front()],constants,c)||std::fabs(c[0])>.002f||std::fabs(c[1])>.002f||std::fabs(c[2])>.002f||c[3]<.001f)return;
@@ -189,7 +207,10 @@ Scope::Scope(IDirect3DDevice9*d,const Draw&draw,bool uiLane,bool skippedRight){
  if(!depthIndependent||!(writes&7)){++stateRejects;if(uiLane){ComPtr<IDirect3DVertexShader9>v;ComPtr<IDirect3DPixelShader9>p;d->GetVertexShader(&v);d->GetPixelShader(&p);rejected_ui(d,v.Get(),p.Get(),draw);}return;}
  ComPtr<IDirect3DVertexShader9>v;ComPtr<IDirect3DPixelShader9>p;if(FAILED(d->GetVertexShader(&v))||FAILED(d->GetPixelShader(&p))||!v||!p){++shaderRejects;if(uiLane)rejected_ui(d,v.Get(),p.Get(),draw);return;}const auto vs=shader(v.Get());const auto ps=shader(p.Get());if(!vs.supported||!ps.supported){++shaderRejects;if(uiLane)rejected_ui(d,v.Get(),p.Get(),draw);return;}
  if(vs.clipPosition&&vs.matrix<0){const float identity[]={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};memcpy(transform,identity,64);}else if(FAILED(d->GetVertexShaderConstantF(vs.matrix,transform,4))){++constantRejects;return;}float constants[32][4]{};if(FAILED(d->GetPixelShaderConstantF(0,&constants[0][0],32))){++constantRejects;return;}Geometry g;if(!geometry(d,draw,g)){++unknown;return;}++reads;
- DWORD blend{},src{},dst{};d->GetRenderState(D3DRS_ALPHABLENDENABLE,&blend);d->GetRenderState(D3DRS_SRCBLEND,&src);d->GetRenderState(D3DRS_DESTBLEND,&dst);const bool multiply=blend&&((src==D3DBLEND_DESTCOLOR&&dst==D3DBLEND_ZERO)||(src==D3DBLEND_ZERO&&dst==D3DBLEND_SRCCOLOR));DWORD activeStencil{};d->GetRenderState(D3DRS_STENCILENABLE,&activeStencil);const bool composite=!blend||multiply||((src==D3DBLEND_SRCALPHA||src==D3DBLEND_ONE||src==D3DBLEND_ZERO)&&dst==D3DBLEND_INVSRCALPHA);if(activeStencil||!composite){geometry_evidence(d,g,draw,vs,ps,transform,constants,Kind::other);return;}const auto now=GetTickCount64();const bool continuing=haveBatStage&&now-lastBat<250&&now-batEpisodeAt<2000&&!memcmp(batStage,transform,64);float opacity{};const auto kind=classify(g,draw,vs,ps,transform,constants,multiply,continuing,&opacity);geometry_evidence(d,g,draw,vs,ps,transform,constants,kind);if(kind==Kind::fade&&removeFades){if(eye<=0)pairFadeAlpha=std::max(pairFadeAlpha,opacity);skip=true;++removed;return;}if(kind!=Kind::bat||!enabled||vs.matrix<0)return;
+ DWORD blend{},src{},dst{};d->GetRenderState(D3DRS_ALPHABLENDENABLE,&blend);d->GetRenderState(D3DRS_SRCBLEND,&src);d->GetRenderState(D3DRS_DESTBLEND,&dst);const bool multiply=blend&&((src==D3DBLEND_DESTCOLOR&&dst==D3DBLEND_ZERO)||(src==D3DBLEND_ZERO&&dst==D3DBLEND_SRCCOLOR));DWORD activeStencil{};d->GetRenderState(D3DRS_STENCILENABLE,&activeStencil);const bool composite=!blend||multiply||((src==D3DBLEND_SRCALPHA||src==D3DBLEND_ONE||src==D3DBLEND_ZERO)&&dst==D3DBLEND_INVSRCALPHA);if(activeStencil||!composite){geometry_evidence(d,g,draw,vs,ps,transform,constants,Kind::other);return;}const auto now=GetTickCount64();const bool continuing=haveBatStage&&now-lastBat<250&&now-batEpisodeAt<2000&&!memcmp(batStage,transform,64);float opacity{};bool blackRectangle=false;auto kind=classify(g,draw,vs,ps,transform,constants,multiply,continuing,&opacity,&blackRectangle);
+ // UPGRADEBLACK2 (LIVE 19:03:59: the 10-triangle full-stage rectangle of a running bat sweep was kept as menu art): a
+ // black rectangle counts as a bat only inside a running sweep (at most 2 s) - the sweep's own black hold, never menu art.
+ if(kind==Kind::bat&&!blackRectangle&&static_artwork(g,draw,transform,now))kind=Kind::other;geometry_evidence(d,g,draw,vs,ps,transform,constants,kind);if(kind==Kind::fade&&removeFades){if(eye<=0)pairFadeAlpha=std::max(pairFadeAlpha,opacity);skip=true;++removed;return;}if(kind!=Kind::bat||!enabled||vs.matrix<0)return;
  if(!ensure()){++captureFailures;return;}device=d;reg=vs.matrix;d->GetRenderTarget(0,&rt);d->GetDepthStencilSurface(&ds);d->GetViewport(&viewport);d->GetScissorRect(&scissor);for(unsigned i=0;i<8;++i)d->GetRenderState(stateKeys[i],this->states+i);
  d->SetDepthStencilSurface(nullptr);if(FAILED(d->SetRenderTarget(0,target.Get()))||FAILED(d->SetDepthStencilSurface(depth.Get()))){d->SetRenderTarget(0,rt);d->SetDepthStencilSurface(ds);++captureFailures;device=nullptr;return;}
  changed=true;D3DSURFACE_DESC size{};target->GetDesc(&size);D3DVIEWPORT9 vp{0,0,size.Width,size.Height,0,1};d->SetViewport(&vp);d->SetRenderState(D3DRS_SCISSORTESTENABLE,FALSE);d->SetRenderState(D3DRS_STENCILENABLE,FALSE);d->SetRenderState(D3DRS_COLORWRITEENABLE,15);d->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE,TRUE);d->SetRenderState(D3DRS_SRCBLENDALPHA,D3DBLEND_ONE);d->SetRenderState(D3DRS_DESTBLENDALPHA,D3DBLEND_INVSRCALPHA);d->SetRenderState(D3DRS_BLENDOPALPHA,D3DBLENDOP_ADD);d->SetRenderState(D3DRS_SRGBWRITEENABLE,FALSE);
@@ -203,13 +224,26 @@ void vertex_created(IDirect3DVertexShader9*s){AcquireSRWLockExclusive(&shaderLoc
 void begin_eye(int e,uint32_t generation){if(e<=0||generation!=gen)pairFadeAlpha=0;eye=e;gen=generation;if(e<=0)painted=false;}
 float fade_alpha(uint32_t generation){return fullViewFades&&removeFades&&generation==gen?pairFadeAlpha:0;}
 IDirect3DSurface9* sheet(){return eye<=0&&painted?target.Get():nullptr;}uint32_t generation(){return gen;}
-void reset(){pairFadeAlpha=0;painted=false;lastBat=0;haveBatStage=false;batEpisodeAt=0;image.Reset();target.Reset();depth.Reset();AcquireSRWLockExclusive(&shaderLock);shaders.clear();ReleaseSRWLockExclusive(&shaderLock);AcquireSRWLockExclusive(&bufferLock);buffers.clear();ReleaseSRWLockExclusive(&bufferLock);}
+void reset(){memset(staticSeen,0,sizeof(staticSeen));pairFadeAlpha=0;painted=false;lastBat=0;haveBatStage=false;batEpisodeAt=0;image.Reset();target.Reset();depth.Reset();AcquireSRWLockExclusive(&shaderLock);shaders.clear();ReleaseSRWLockExclusive(&shaderLock);AcquireSRWLockExclusive(&bufferLock);buffers.clear();ReleaseSRWLockExclusive(&bufferLock);}
 void fallback(IDirect3DSurface9* destination){if(!owned||!image||!destination)return;internal=true;ComPtr<IDirect3DStateBlock9>s;ComPtr<IDirect3DSurface9>rt,ds;if(FAILED(owned->CreateStateBlock(D3DSBT_ALL,&s))){internal=false;return;}owned->GetRenderTarget(0,&rt);owned->GetDepthStencilSurface(&ds);D3DSURFACE_DESC desc{};destination->GetDesc(&desc);if(FAILED(owned->BeginScene())){internal=false;return;}owned->SetDepthStencilSurface(nullptr);owned->SetRenderTarget(0,destination);D3DVIEWPORT9 vp{0,0,desc.Width,desc.Height,0,1};owned->SetViewport(&vp);owned->SetVertexShader(nullptr);owned->SetPixelShader(nullptr);owned->SetFVF(D3DFVF_XYZRHW|D3DFVF_TEX1);owned->SetTexture(0,image.Get());owned->SetTextureStageState(0,D3DTSS_COLOROP,D3DTOP_SELECTARG1);owned->SetTextureStageState(0,D3DTSS_COLORARG1,D3DTA_TEXTURE);owned->SetTextureStageState(0,D3DTSS_ALPHAOP,D3DTOP_SELECTARG1);owned->SetTextureStageState(0,D3DTSS_ALPHAARG1,D3DTA_TEXTURE);owned->SetTextureStageState(1,D3DTSS_COLOROP,D3DTOP_DISABLE);owned->SetRenderState(D3DRS_ZENABLE,FALSE);owned->SetRenderState(D3DRS_STENCILENABLE,FALSE);owned->SetRenderState(D3DRS_SCISSORTESTENABLE,FALSE);owned->SetRenderState(D3DRS_ALPHABLENDENABLE,TRUE);owned->SetRenderState(D3DRS_SRCBLEND,D3DBLEND_ONE);owned->SetRenderState(D3DRS_DESTBLEND,D3DBLEND_INVSRCALPHA);owned->SetRenderState(D3DRS_COLORWRITEENABLE,15);struct V{float x,y,z,w,u,v;};const V v[]={{-.5f,-.5f,0,1,0,0},{float(desc.Width)-.5f,-.5f,0,1,1,0},{-.5f,float(desc.Height)-.5f,0,1,0,1},{float(desc.Width)-.5f,float(desc.Height)-.5f,0,1,1,1}};owned->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP,2,v,sizeof(V));owned->EndScene();owned->SetDepthStencilSurface(nullptr);owned->SetRenderTarget(0,rt.Get());owned->SetDepthStencilSurface(ds.Get());s->Apply();internal=false;}
-void status_line(char*out,size_t bytes){if(out&&bytes)snprintf(out,bytes,"fullViewBats=%u removePlainFades=%u blackRectsRemoved=%u batDraws=%u geometryReads=%u missingUpload=%u failedCapture=%u CPUuploads=%u shaderRejects=%u stateRejects=%u constantRejects=%u managedReads=%u",enabled,removeFades,removed,bats,reads,unknown,captureFailures,bufferCopies,shaderRejects,stateRejects,constantRejects,managedReads);}
+void status_line(char*out,size_t bytes){if(out&&bytes)snprintf(out,bytes,"fullViewBats=%u removePlainFades=%u staticMenuArt=%u/%u blackRectsRemoved=%u batDraws=%u geometryReads=%u missingUpload=%u failedCapture=%u CPUuploads=%u shaderRejects=%u stateRejects=%u constantRejects=%u managedReads=%u",enabled,removeFades,staticArtwork,staticKept,removed,bats,reads,unknown,captureFailures,bufferCopies,shaderRejects,stateRejects,constantRejects,managedReads);}
 void status(){char line[320]{};status_line(line,sizeof(line));BVR_LOG("[aa transitions] %s",line);BVR_LOG("[aa menu fade] enabled%u gen%u alpha%.4f; engine envelope, behind HUD",fullViewFades,gen,fade_alpha(gen));}
-void draw_ui(){bool b=enabled,f=removeFades,m=fullViewFades;if(ImGui::Checkbox("Full-view fades behind menu text",&m)){fullViewFades=m;WritePrivateProfileStringW(L"AsylumVR",L"FullViewMenuFades",m?L"1":L"0",settings);}if(ImGui::Checkbox("Full-view bat transitions",&b)){enabled=b;WritePrivateProfileStringW(L"AsylumVR",L"FullViewBats",b?L"1":L"0",settings);}if(ImGui::Checkbox("Remove windowed black fades",&f)){removeFades=f;WritePrivateProfileStringW(L"AsylumVR",L"RemovePlainFades",f?L"1":L"0",settings);}}
+void draw_ui(){bool b=enabled,f=removeFades,m=fullViewFades;if(ImGui::Checkbox("Full-view fades behind menu text",&m)){fullViewFades=m;WritePrivateProfileStringW(L"AsylumVR",L"FullViewMenuFades",m?L"1":L"0",settings);}if(ImGui::Checkbox("Full-view bat transitions",&b)){enabled=b;WritePrivateProfileStringW(L"AsylumVR",L"FullViewBats",b?L"1":L"0",settings);}bool st=staticArtwork;if(ImGui::Checkbox("Keep still black menu art in the menu (upgrades screen)",&st))staticArtwork=st;if(ImGui::Checkbox("Remove windowed black fades",&f)){removeFades=f;WritePrivateProfileStringW(L"AsylumVR",L"RemovePlainFades",f?L"1":L"0",settings);}}
 bool fixture(IDirect3DDevice9*d,const wchar_t*directory,bool (*completed)(IDirect3DSurface9*)){
- if(!install(d))return false;ComPtr<IDirect3DStateBlock9>state;ComPtr<IDirect3DSurface9>originalRt,originalDs;D3DVIEWPORT9 originalVp{};if(FAILED(d->CreateStateBlock(D3DSBT_ALL,&state))||FAILED(d->GetRenderTarget(0,&originalRt))||FAILED(d->GetViewport(&originalVp)))return false;d->GetDepthStencilSurface(&originalDs);
+ if(!install(d))return false;
+ {// UPGRADEBLACK: one repeated mesh is kept in the menu from its 10th draw; a sweep changing every frame never is; a pause
+  // over 250 ms starts the count again.
+  Geometry g;g.points.resize(4);g.indices={0,1,2};Draw draw{};draw.count=8;const float t[16]={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+  ULONGLONG at=1000000;bool ok=true;memset(staticSeen,0,sizeof(staticSeen));
+  for(unsigned i=1;i<=12;++i)ok=static_artwork(g,draw,t,at+=16)==(i>=kStaticFrames)&&ok;
+  for(unsigned i=0;i<30;++i){draw.count=288+i;ok=!static_artwork(g,draw,t,at+=16)&&ok;}
+  draw.count=8;ok=!static_artwork(g,draw,t,at+=400)&&ok;
+  g.points[1].p[0]=.5f;for(unsigned i=0;i<5;++i)ok=!static_artwork(g,draw,t,at+=16)&&ok;
+  memset(staticSeen,0,sizeof(staticSeen));staticKept=0;
+  if(!ok){printf("Static menu art (UPGRADEBLACK) FAIL\n");return false;}
+  printf("Static menu art (UPGRADEBLACK): repeated black mesh kept in the menu from draw %u, changing sweep stays a bat, 250 ms gap restarts PASS\n",kStaticFrames);
+ }
+ ComPtr<IDirect3DStateBlock9>state;ComPtr<IDirect3DSurface9>originalRt,originalDs;D3DVIEWPORT9 originalVp{};if(FAILED(d->CreateStateBlock(D3DSBT_ALL,&state))||FAILED(d->GetRenderTarget(0,&originalRt))||FAILED(d->GetViewport(&originalVp)))return false;d->GetDepthStencilSurface(&originalDs);
  const bool oldEnabled=enabled,oldFades=removeFades,oldFullFades=fullViewFades;struct Restore{IDirect3DDevice9*d;IDirect3DStateBlock9*s;IDirect3DSurface9*rt,*ds;D3DVIEWPORT9 vp;bool b,f,m;~Restore(){d->SetDepthStencilSurface(nullptr);d->SetRenderTarget(0,rt);d->SetDepthStencilSurface(ds);d->SetViewport(&vp);s->Apply();fixtureW=fixtureH=0;enabled=b;removeFades=f;fullViewFades=m;reset();}}restore{d,state.Get(),originalRt.Get(),originalDs.Get(),originalVp,oldEnabled,oldFades,oldFullFades};enabled=removeFades=fullViewFades=true;fixtureW=192;fixtureH=208;
  auto load=[&](const wchar_t*name,std::vector<DWORD>&out){wchar_t path[MAX_PATH]{};swprintf_s(path,L"%s\\%s.bin",directory,name);FILE*f=_wfopen(path,L"rb");if(!f)return false;fseek(f,0,SEEK_END);long n=ftell(f);rewind(f);if(n<=0||n%4||n>32768){fclose(f);return false;}out.resize(n/4);bool ok=fread(out.data(),1,n,f)==n;fclose(f);return ok;};
  std::vector<DWORD>v,p;if(!load(L"ui-solid-vs",v)||!load(L"ui-constant-ps",p))return false;ComPtr<IDirect3DVertexShader9>vs;ComPtr<IDirect3DPixelShader9>ps;if(FAILED(d->CreateVertexShader(v.data(),&vs))||FAILED(d->CreatePixelShader(p.data(),&ps)))return false;

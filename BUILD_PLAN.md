@@ -1,3 +1,39 @@
+## UPGRADEBLACK2 (2026-10-20 19:1x) - static-art rule caught a bat sweep's black hold
+LIVE 19:03:59: "UPGRADEBLACK: static black menu artwork kept ... primitives10 vertices12" = the 10-triangle full-stage AA
+rectangle, which classify() calls a bat only while a sweep runs (continuing, <= 2 s): the sweep's own black hold, never a
+minute-long menu mesh. Fix: rectangles are exempt from the static rule (only the stage-covering / edge-sweep mesh path can
+stay "bat" for a whole menu). Built, 11/11 checks; NOT yet installed (game running at build time). JJ 19:1x: first-person
+camera "may have been an anomaly. It seems okay now"; log 19:05: head bone found, offset -7, -5.3, 13.1 UU.
+
+## UPGRADEBLACK - upgrades screen completely black in the headset, fine on the desktop (JJ 2026-10-20, 0.1.4 local)
+
+Looked up: batman_city TABRACE (black Tab screen = HUD gameplay-flag race; Asylum has no such flag path), Origins BUILD_PLAN
+(TABRACE checked: not applicable), City MS menu-state / upgrades notes (MENUHOLD timing only), transitions9 A1x-A2c
+(bat classifier). Nothing for a STILL menu mesh caught by the bat test.
+LIVE 18:48:30-18:49:37 (JJ in the upgrades screen): batDraws rose ~54/s = one per frame, no bat transition; native pairs
+normal. The bat classifier accepts any opaque-black mesh of 8+ triangles covering the stage; the full-view bat layer is
+drawn over the menu (1.6x zoom, near plane), so a black backdrop / frame of the upgrades screen turned the view black. The
+real sweep changes its mesh every frame (startup log: 288, 439, 686 ... primitives).
+Fix (SOURCE, built, 11/11 checks incl. new "Static menu art" fixture, installed locally as 0.1.4): a bat-classified mesh +
+placement seen unchanged 10 times (each within 250 ms) is menu artwork, kept in the menu. Log "UPGRADEBLACK: static black
+menu artwork kept ... primitivesN verticesM" (first 8), status "staticMenuArt=on/count"; TESTS checkbox "Keep still black
+menu art in the menu". HEADSET next: open upgrades (menu visible after a ~0.15 s blink), bat wipes unchanged.
+
+## HEADLOCK - head goes through the first-person camera when running / gliding (JJ 2026-10-20, 0.1.3 HEADSET)
+
+JJ: "First person works, but when you start running or flying, the head moves, so the camera needs to be linked to the
+head movements so that the head doesn't intersect the camera at any point." LIVE 18:32 log: "first person head: bone read
+faulted - steady eye point" EVERY frame, so the camera never followed the head (fixed collision eye point). STATIC cause:
+GetBoneMatrix 0x91D2A0 hands the out matrix to the matrix multiply 0x58E560, which stores with movaps: the out buffer
+must be 16-byte aligned (the game's caller aligns its stack); ours was a plain local. The offsets were right: the game's
+own read casts controller +0x1A8 (= the pawn the mod finds) with IsA 0x7D94D0 and reads +0x348. Fix 1: alignas(16).
+Fix 2, HEADLOCK (both games): the 0.08 s head smoothing may trail the real head bone by at most 3 UU (~3 cm), so a fast
+lunge / glide cannot bring the head toward the camera (camera 25 cm in front of the face). Built, offline checks pass
+(Asylum d3d9_gpu_transport intermittently fails at random stages while the GPU is 94% loaded by other apps - the released
+0.1.3 DLL fails the same way now, it passed 3/3 this morning). Labelled 0.1.4, packaged, installed on JJ's game; NOT
+released. HEADSET next: run + glide in first person; log must show "first person head: mesh ..., Bip01_Head - eye point"
+and no "bone read faulted".
+
 ## RELEASE 0.1.3 (2026-10-20, JJ: "deploy both of those to github")
 
 First person (FIRSTPERSON, below) + launcher access-denied fix (WRITEDENIED, below). Version 0.1.3 (CMake, package, panel title).
