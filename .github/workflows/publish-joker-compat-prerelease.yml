@@ -1,0 +1,74 @@
+name: Publish Joker compatibility prerelease
+
+on:
+  push:
+    branches:
+      - "compat/joker-dlc-patcher"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[publish-joker-compat]')
+    runs-on: windows-2022
+    env:
+      RELEASE_TAG: v0.1.4-joker-compat
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check out compatibility branch
+        uses: actions/checkout@v4
+
+      - name: Configure Win32 build
+        run: cmake -S . -B build-native9 -G "Visual Studio 17 2022" -A Win32
+
+      - name: Build native VR DLL and companion binaries
+        run: cmake --build build-native9 --config Release --parallel
+
+      - name: Run deterministic tests
+        run: ctest --test-dir build-native9 -C Release --output-on-failure -R "scene_and_canvas_projection|render_size_fits_desktop|opening_movie_identity"
+
+      - name: Parse PowerShell compatibility scripts
+        shell: pwsh
+        run: |
+          $files = @(
+            'tools/Launch-VR.ps1',
+            'tools/Apply-JokerCompatBuild.ps1',
+            'tools/Install-VR.ps1',
+            'install/Install-BatmanAsylumVR.ps1'
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file).Path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count) {
+              $parseErrors | ForEach-Object { Write-Error "${file}: $($_.Message) at line $($_.Extent.StartLineNumber)" }
+              throw "PowerShell parse failed: $file"
+            }
+            Write-Host "PowerShell parse passed: $file"
+          }
+
+      - name: Stage compatibility overlay
+        shell: pwsh
+        run: |
+          $stage = 'dist/BatmanAsylumVR-JokerCompat'
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item build-native9/Release/batman_asylum.dll $stage/
+          Copy-Item build-native9/Release/d3d9.dll $stage/
+          Copy-Item build-native9/Release/xinput1_3.dll $stage/
+          Copy-Item build-native9/Release/aa_xr_config32.exe $stage/
+          Copy-Item tools/Launch-VR.ps1 $stage/
+          Copy-Item tools/Apply-JokerCompatBuild.ps1 $stage/
+          Copy-Item install/Install-BatmanAsylumVR.ps1 $stage/
+          Copy-Item .github/releases/joker-compat-prerelease.md "$stage/README-Joker-Compatibility.md"
+          Compress-Archive -Path "$stage/*" -DestinationPath "dist/Batman_Asylum_VR_Joker_Compatibility.zip" -CompressionLevel Optimal
+
+      - name: Publish GitHub pre-release
+        shell: pwsh
+        run: |
+          $existing = gh release list --limit 100 --json tagName | ConvertFrom-Json
+          if ($existing.tagName -contains $env:RELEASE_TAG) {
+            throw "Release tag already exists: $env:RELEASE_TAG. Refusing to overwrite an existing release."
+          }
+          gh release create $env:RELEASE_TAG "dist/Batman_Asylum_VR_Joker_Compatibility.zip" --title "Batman Asylum VR - Joker DLC Patcher Compatibility" --notes-file ".github/releases/joker-compat-prerelease.md" --prerelease --target $env:GITHUB_SHA
