@@ -18,7 +18,7 @@ jobs:
         run: cmake --build build-native9 --config Release --parallel 2 --target batman_asylum d3d9 xinput1_3 asylum_head_aim_check asylum_present_sequence_check asylum_opening_movies_check asylum_stereo_projection_check
       - name: Run CPU regressions (GPU and game runtime require a player PC)
         run: ctest --test-dir build-native9 -C Release --output-on-failure -R "^(first_person_head_aim|native_present_sequence|opening_movie_identity|scene_and_canvas_projection)$"
-      - name: Save test DLLs (requires an existing 0.1.4 installation)
+      - name: Save test DLLs (install through the complete 0.1.4 package; see guide)
         uses: actions/upload-artifact@v4
         with:
           name: head-aim-test-dlls

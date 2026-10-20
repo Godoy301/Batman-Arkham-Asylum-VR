@@ -21,11 +21,35 @@ No Windows, use os comandos de compilação do README. O novo CTest se chama
 Win32 e executa quatro testes de CPU; ele não executa o jogo, testes de GPU,
 OpenXR, nem compila o helper DLSS de 64 bits.
 
-O artefato `head-aim-test-dlls` contém somente as DLLs de teste. Ele requer uma
-instalação funcional do mod 0.1.4, com seu helper e dependências. Com o jogo
-fechado, faça uma cópia das três DLLs existentes em `Binaries` antes de
-substituí-las pelas DLLs do artefato. Para voltar, restaure essa cópia. Este
-artefato não é o instalador completo de uma nova versão.
+## Instalar as DLLs de teste (incluindo o manifesto)
+
+O artefato `head-aim-test-dlls` contém somente as DLLs de teste. Use também o
+ZIP completo da versão **0.1.4** nas
+[releases originais](https://github.com/junglejuz/Batman-Arkham-Asylum-VR/releases).
+Mantenha esse ZIP original para poder voltar à versão anterior.
+
+1. Feche o jogo. Extraia o ZIP completo 0.1.4 para uma pasta de trabalho fora
+   da pasta do jogo, por exemplo `Downloads\AsylumVR-HeadAim`.
+2. Extraia o artefato de teste separadamente. Localize `batman_asylum.dll`,
+   `d3d9.dll` e `xinput1_3.dll` (o artefato pode colocá-las em
+   `build-native9\Release`). Copie **essas três DLLs** para a pasta de trabalho,
+   ao lado de `Install-BatmanAsylumVR.bat`, substituindo as versões do pacote
+   original. Preserve os demais arquivos e a pasta `files` do ZIP completo.
+3. Execute `Install-BatmanAsylumVR.bat` **dessa pasta de trabalho modificada**.
+   Ele instala as DLLs de teste e recria `Binaries\asylumvr_manifest.json` com
+   os hashes dos arquivos instalados. As configurações VR existentes são mantidas.
+4. Inicie pelo atalho VR normal e siga o teste abaixo.
+
+Trocar DLLs diretamente em `Binaries` deixa os hashes do manifesto antigo.
+Isso causa `A mod file in the game folder is missing or changed (d3d9.dll)`
+antes mesmo de o jogo abrir. Se você já fez essa troca, o procedimento acima
+também corrige essa instalação. Não é necessário desinstalar primeiro.
+Não apague o manifesto nem remova a verificação no launcher.
+
+Para voltar à versão original, extraia novamente o ZIP completo **sem as DLLs
+de teste** para outra pasta e execute seu instalador. Ele restaura os arquivos
+originais e recria o manifesto correspondente. Executar o instalador de um
+pacote original não modificado também remove a funcionalidade de teste.
 
 Os testes portáveis verificam a direção de mira contra raios independentes,
 giro do controle somado ao headset, ausência de acumulação da rotação do
