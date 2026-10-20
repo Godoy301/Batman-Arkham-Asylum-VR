@@ -28,12 +28,12 @@ This payload updates an existing installation; it is not a complete standalone m
 3. Open PowerShell in that folder and run the command below, adjusting the path to your game's `Binaries` directory:
 
    ```powershell
-   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\Apply-JokerCompatBuild.ps1 -GameBinaries "F:\\SteamLibrary\\steamapps\\common\\Batman Arkham Asylum GOTY\\Binaries"
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Apply-JokerCompatBuild.ps1 -GameBinaries "F:\SteamLibrary\steamapps\common\Batman Arkham Asylum GOTY\Binaries"
    ```
 
 4. Start your PC VR software and launch the game using the existing **Batman Asylum VR** shortcut.
 
-The helper verifies every file listed in the installed mod manifest before replacing anything. It backs up the four core binaries, the VR launcher script, and the manifest to `%LOCALAPPDATA%\\Batman_Asylum\\joker-compat-backup\\<timestamp>`, then refreshes the manifest hashes for the files it replaces. It does not modify `ShippingPC-BmGame.exe`.
+The helper verifies every file listed in the installed mod manifest before replacing anything. It backs up the four core binaries, the VR launcher script, and the manifest to `%LOCALAPPDATA%\Batman_Asylum\joker-compat-backup\<timestamp>`, then refreshes the manifest hashes for the files it replaces. It does not modify `ShippingPC-BmGame.exe`.
 
 To roll back, close the game and copy the corresponding backed-up files and `asylumvr_manifest.json` from the reported backup directory back to the game folder.
 
