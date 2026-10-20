@@ -22,7 +22,7 @@ if (!$manifest.files) { throw 'The mod manifest is missing its files list. Nothi
 
 # Validate every installed mod file before replacing anything, so this helper does not conceal unrelated changes.
 foreach ($record in $manifest.files) {
-    $path = Join-Path $GameBinaries ($record.name -replace '/', '\\')
+    $path = Join-Path $GameBinaries ($record.name -replace '/', '\')
     if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw "Installed mod file is missing: $($record.name). Nothing was changed." }
     $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
     if ($actual -ne $record.sha256) { throw "Installed mod file was modified before this update: $($record.name). Nothing was changed." }
@@ -50,8 +50,8 @@ $backupRoot = Join-Path $env:LOCALAPPDATA ('Batman_Asylum/joker-compat-backup/' 
 New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
 Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $backupRoot 'asylumvr_manifest.json')
 foreach ($targetName in $payload.Keys) {
-    $destination = Join-Path $GameBinaries ($targetName -replace '/', '\\')
-    $backupPath = Join-Path $backupRoot ($targetName -replace '/', '\\')
+    $destination = Join-Path $GameBinaries ($targetName -replace '/', '\')
+    $backupPath = Join-Path $backupRoot ($targetName -replace '/', '\')
     New-Item -ItemType Directory -Path (Split-Path $backupPath -Parent) -Force | Out-Null
     Copy-Item -LiteralPath $destination -Destination $backupPath
 }
@@ -59,13 +59,13 @@ foreach ($targetName in $payload.Keys) {
 try {
     foreach ($targetName in $payload.Keys) {
         $source = Join-Path $PSScriptRoot $payload[$targetName]
-        $destination = Join-Path $GameBinaries ($targetName -replace '/', '\\')
+        $destination = Join-Path $GameBinaries ($targetName -replace '/', '\')
         Copy-Item -LiteralPath $source -Destination $destination -Force
     }
 
     foreach ($record in $manifest.files) {
         if ($payload.Contains($record.name)) {
-            $path = Join-Path $GameBinaries ($record.name -replace '/', '\\')
+            $path = Join-Path $GameBinaries ($record.name -replace '/', '\')
             $record.sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
             $record.bytes = (Get-Item -LiteralPath $path).Length
         }
@@ -76,8 +76,8 @@ try {
 catch {
     Write-Warning "Update failed. Restoring the backed-up files from $backupRoot"
     foreach ($targetName in $payload.Keys) {
-        $destination = Join-Path $GameBinaries ($targetName -replace '/', '\\')
-        $backupPath = Join-Path $backupRoot ($targetName -replace '/', '\\')
+        $destination = Join-Path $GameBinaries ($targetName -replace '/', '\')
+        $backupPath = Join-Path $backupRoot ($targetName -replace '/', '\')
         if (Test-Path -LiteralPath $backupPath) { Copy-Item -LiteralPath $backupPath -Destination $destination -Force }
     }
     Copy-Item -LiteralPath (Join-Path $backupRoot 'asylumvr_manifest.json') -Destination $manifestPath -Force
