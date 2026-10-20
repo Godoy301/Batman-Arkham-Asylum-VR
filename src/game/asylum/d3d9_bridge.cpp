@@ -828,7 +828,7 @@ extern "C" __declspec(dllexport) IDirect3D9* WINAPI AA_CreateD3D9(UINT sdk) {
     const DWORD hostIdentity = AA_Identity();
     if(!bridgeReady || hostIdentity!=1) {
         char diagnostic[192]{};
-        sprintf_s(diagnostic, "[Batman Asylum VR] Native D3D9 fallback: ready=%u identity=%lu\\n",
+        sprintf_s(diagnostic, "[Batman Asylum VR] Native D3D9 fallback: ready=%u identity=%lu\n",
                   bridgeReady ? 1u : 0u, static_cast<unsigned long>(hostIdentity));
         OutputDebugStringA(diagnostic);
         if(hostIdentity==1)
