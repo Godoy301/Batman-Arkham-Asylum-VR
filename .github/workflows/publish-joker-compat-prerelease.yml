@@ -35,6 +35,7 @@ jobs:
           $files = @(
             'tools/Launch-VR.ps1',
             'tools/Apply-JokerCompatBuild.ps1',
+            'tools/Install-Joker-Compatibility.ps1',
             'tools/Install-VR.ps1',
             'install/Install-BatmanAsylumVR.ps1'
           )
@@ -60,6 +61,8 @@ jobs:
           Copy-Item build-native9/Release/aa_xr_config32.exe $stage/
           Copy-Item tools/Launch-VR.ps1 $stage/
           Copy-Item tools/Apply-JokerCompatBuild.ps1 $stage/
+          Copy-Item tools/Install-Joker-Compatibility.bat $stage/
+          Copy-Item tools/Install-Joker-Compatibility.ps1 $stage/
           Copy-Item install/Install-BatmanAsylumVR.ps1 $stage/
           Copy-Item .github/releases/joker-compat-prerelease.md "$stage/README-Joker-Compatibility.md"
           Compress-Archive -Path "$stage/*" -DestinationPath "dist/Batman_Asylum_VR_Joker_Compatibility.zip" -CompressionLevel Optimal
@@ -69,6 +72,8 @@ jobs:
         run: |
           $existing = gh release list --limit 100 --json tagName | ConvertFrom-Json
           if ($existing.tagName -contains $env:RELEASE_TAG) {
-            throw "Release tag already exists: $env:RELEASE_TAG. Refusing to overwrite an existing release."
+            gh release edit $env:RELEASE_TAG --title "Batman Asylum VR - Joker DLC Patcher Compatibility" --notes-file ".github/releases/joker-compat-prerelease.md" --prerelease
+            gh release upload $env:RELEASE_TAG "dist/Batman_Asylum_VR_Joker_Compatibility.zip" --clobber
+          } else {
+            gh release create $env:RELEASE_TAG "dist/Batman_Asylum_VR_Joker_Compatibility.zip" --title "Batman Asylum VR - Joker DLC Patcher Compatibility" --notes-file ".github/releases/joker-compat-prerelease.md" --prerelease --target $env:GITHUB_SHA
           }
-          gh release create $env:RELEASE_TAG "dist/Batman_Asylum_VR_Joker_Compatibility.zip" --title "Batman Asylum VR - Joker DLC Patcher Compatibility" --notes-file ".github/releases/joker-compat-prerelease.md" --prerelease --target $env:GITHUB_SHA
