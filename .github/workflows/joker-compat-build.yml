@@ -25,6 +25,26 @@ jobs:
       - name: Run deterministic compatibility tests
         run: ctest --test-dir build-native9 -C Release --output-on-failure -R "scene_and_canvas_projection|render_size_fits_desktop|opening_movie_identity"
 
+      - name: Parse PowerShell compatibility scripts
+        shell: pwsh
+        run: |
+          $files = @(
+            'tools/Launch-VR.ps1',
+            'tools/Apply-JokerCompatBuild.ps1',
+            'tools/Install-VR.ps1',
+            'install/Install-BatmanAsylumVR.ps1'
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file).Path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count) {
+              $parseErrors | ForEach-Object { Write-Error "${file}: $($_.Message) at line $($_.Extent.StartLineNumber)" }
+              throw "PowerShell parse failed: $file"
+            }
+            Write-Host "PowerShell parse passed: $file"
+          }
+
       - name: Stage test payload
         shell: pwsh
         run: |
