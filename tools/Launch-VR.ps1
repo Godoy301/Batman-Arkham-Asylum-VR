@@ -10,7 +10,9 @@ $manifest=Get-Content -LiteralPath (Join-Path $bin 'asylumvr_manifest.json') -Ra
 foreach($record in $manifest.files) {
  if((Get-FileHash -LiteralPath (Join-Path $bin $record.name)).Hash -ne $record.sha256) {throw "A mod file in the game folder is missing or changed ($($record.name)). Run Install-BatmanAsylumVR.bat again."}
 }
-if((Get-FileHash -LiteralPath $exe).Hash -ne '4dac1f5e2ac6710b7378fdce74601f616f4753e3756cb5fda63c7519cc2eb028') {throw 'This copy of the game is a different version from the one the mod was made for (Steam, Game of the Year Edition).'}
+$exeHash = (Get-FileHash -LiteralPath $exe).Hash
+$supportedExeHashes = @('4dac1f5e2ac6710b7378fdce74601f616f4753e3756cb5fda63c7519cc2eb028', 'ed65ce3c52baca7adaea00cb0e5def3d8a78bd05f7ceacd68a68462e92d8dab2')
+if($exeHash -notin $supportedExeHashes) {throw 'This copy of the game is not a supported Steam GOTY executable (stock or known Joker DLC patch).'}
 $games=@(Get-Process -ErrorAction SilentlyContinue | Where-Object ProcessName -Match '^(ShippingPC-BmGame|BatmanOrigins|BatmanAC|BatmanAK|ACUnity|sekiro|DarkSoulsIII|armoredcore6|starwarsbattlefrontii|BioShockInfinite|BioshockHD)$')
 if($games.Count) {throw "Close the running game first: $($games.ProcessName -join ', ')"}
 New-Item -ItemType Directory -Path $data -Force | Out-Null
