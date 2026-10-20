@@ -25,13 +25,22 @@ jobs:
       - name: Run deterministic compatibility tests
         run: ctest --test-dir build-native9 -C Release --output-on-failure -R "scene_and_canvas_projection|render_size_fits_desktop|opening_movie_identity"
 
+      - name: Stage test payload
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force staging | Out-Null
+          Copy-Item build-native9/Release/batman_asylum.dll staging/
+          Copy-Item build-native9/Release/d3d9.dll staging/
+          Copy-Item build-native9/Release/xinput1_3.dll staging/
+          Copy-Item build-native9/Release/aa_xr_config32.exe staging/
+          Copy-Item tools/Launch-VR.ps1 staging/
+          Copy-Item tools/Apply-JokerCompatBuild.ps1 staging/
+          Copy-Item install/Install-BatmanAsylumVR.ps1 staging/
+          Copy-Item JOKER-DLC-COMPATIBILITY.md staging/README-Joker-Compatibility.md
+
       - name: Upload build artifacts for testing (not a release package)
         uses: actions/upload-artifact@v4
         with:
           name: asylumvr-joker-compat-win32
           if-no-files-found: error
-          path: |
-            build-native9/Release/batman_asylum.dll
-            build-native9/Release/d3d9.dll
-            build-native9/Release/xinput1_3.dll
-            build-native9/Release/aa_xr_config32.exe
+          path: staging/*
