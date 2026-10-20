@@ -1,4 +1,4 @@
-name: Publish Joker compatibility prerelease
+name: Publish or refresh Joker compatibility prerelease
 
 on:
   push:
