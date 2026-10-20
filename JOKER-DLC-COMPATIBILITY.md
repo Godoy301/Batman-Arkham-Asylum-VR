@@ -19,6 +19,24 @@ This branch accepts the one known Joker-patched hash and logs which supported ex
 
 The two differences in the supplied executables are at file offsets `0x012153C6` and `0x012153CB`, in the Joker DLC flag routine. This change does not patch the game executable. Unknown host executable hashes remain rejected, and the launcher's checks for altered mod files remain enabled.
 
+## Apply the experimental test payload
+
+This payload updates an existing installation; it is not a complete standalone mod package. Install the official Batman Asylum VR mod first, and make sure `asylumvr_manifest.json` is intact. The existing x64 DLSS helper is reused.
+
+1. Close Batman: Arkham Asylum.
+2. Extract the CI artifact ZIP to a folder.
+3. Open PowerShell in that folder and run the command below, adjusting the path to your game's `Binaries` directory:
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\Apply-JokerCompatBuild.ps1 -GameBinaries "F:\\SteamLibrary\\steamapps\\common\\Batman Arkham Asylum GOTY\\Binaries"
+   ```
+
+4. Start your PC VR software and launch the game using the existing **Batman Asylum VR** shortcut.
+
+The helper verifies every file listed in the installed mod manifest before replacing anything. It backs up the four core binaries, the VR launcher script, and the manifest to `%LOCALAPPDATA%\\Batman_Asylum\\joker-compat-backup\\<timestamp>`, then refreshes the manifest hashes for the files it replaces. It does not modify `ShippingPC-BmGame.exe`.
+
+To roll back, close the game and copy the corresponding backed-up files and `asylumvr_manifest.json` from the reported backup directory back to the game folder.
+
 ## Validation status
 
 This is a development compatibility branch, not a tested release. The Win32 build and deterministic tests must pass. The generated DLL must then be tested with both stock and Joker-patched executables on a PC with a connected headset before creating a public release.
