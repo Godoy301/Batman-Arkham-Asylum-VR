@@ -824,7 +824,18 @@ extern "C" __declspec(dllexport) IDirect3D9* WINAPI AA_CreateD3D9(UINT sdk) {
     while(!ready.load() && AA_Identity()!=2 && GetTickCount64()<deadline) Sleep(1);
     HMODULE sys=load_system9();if(!sys) return nullptr;
     const auto native=reinterpret_cast<IDirect3D9*(WINAPI*)(UINT)>(GetProcAddress(sys,"Direct3DCreate9"));
-    if(!ready.load() || AA_Identity()!=1) return native ? native(sdk):nullptr;
+    const bool bridgeReady = ready.load();
+    const DWORD hostIdentity = AA_Identity();
+    if(!bridgeReady || hostIdentity!=1) {
+        char diagnostic[192]{};
+        sprintf_s(diagnostic, "[Batman Asylum VR] Native D3D9 fallback: ready=%u identity=%lu\\n",
+                  bridgeReady ? 1u : 0u, static_cast<unsigned long>(hostIdentity));
+        OutputDebugStringA(diagnostic);
+        if(hostIdentity==1)
+            BVR_LOG("[aa bridge] falling back to stock D3D9: ready=%u identity=%lu",
+                    bridgeReady ? 1u : 0u, static_cast<unsigned long>(hostIdentity));
+        return native ? native(sdk):nullptr;
+    }
     wchar_t route[32]{};GetEnvironmentVariableW(L"AA_GRAPHICS_BRIDGE",route,32);
     if(_wcsicmp(route,L"9on12")!=0){
         auto createEx=reinterpret_cast<HRESULT(WINAPI*)(UINT,IDirect3D9Ex**)>(GetProcAddress(sys,"Direct3DCreate9Ex"));IDirect3D9Ex* ex{};
