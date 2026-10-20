@@ -39,4 +39,9 @@ To roll back, close the game and copy the corresponding backed-up files and `asy
 
 ## Validation status
 
-This is a development compatibility branch, not a tested release. The Win32 build and deterministic tests must pass. The generated DLL must then be tested with both stock and Joker-patched executables on a PC with a connected headset before creating a public release.
+- Windows Win32 build: passed in GitHub Actions.
+- Selected deterministic tests: passed in GitHub Actions.
+- PowerShell parser checks: passed in GitHub Actions.
+- Real headset test: the maintainer confirmed that the supplied test payload successfully launches the Joker DLC-patched executable in VR.
+
+This is now a working compatibility build for the exact Joker-patched executable hash listed above, based on the reported hardware test. It remains intentionally limited to that specific patched hash; other patches or game builds are not covered. A public release should include the tested payload and these limitations in its release notes.
