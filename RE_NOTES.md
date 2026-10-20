@@ -2418,3 +2418,7 @@ the guide's generic AFR recommendation is not adopted. Existing target-specific
 0/5/24 ABIs and history allocator remain guarded. This fix does not prove
 once-only UI side effects, headset fusion, shaders/reflections or endurance.
 
+
+
+## FIRSTPERSON (STATIC 2026-10-20)
+Pawn / head-bone offsets for first person, found by City's code shape: table and evidence in BUILD_PLAN "FIRSTPERSON"; code comment at the top of src/game/asylum/first_person.cpp.

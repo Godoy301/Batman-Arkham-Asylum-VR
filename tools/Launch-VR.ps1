@@ -66,8 +66,9 @@ $w=[int]$render.width;$h=[int]$render.height
 $backup=Join-Path $data ('profiles/'+(Get-Date -Format yyyyMMdd_HHmmss_fff))
 New-Item -ItemType Directory -Path $backup -Force | Out-Null
 $files=@();$i=0
-foreach($path in (Get-AsylumConfigPaths $game)) {
- if(!(Test-Path -LiteralPath $path)) {throw "Game configuration absent: $path"}
+$configs=@(Get-AsylumConfigPaths $game)
+foreach($path in $configs) {if(!(Test-Path -LiteralPath $path)) {throw "Game configuration absent: $path"}}
+foreach($path in (Select-AsylumWritableConfigs $game $configs)) {
  $copy=Join-Path $backup ("$i-"+[IO.Path]::GetFileName($path));$i++
  [IO.File]::WriteAllBytes($copy,[IO.File]::ReadAllBytes($path))
  $files+=@{path=$path;backup=$copy;sha256=(Get-FileHash -LiteralPath $path).Hash}

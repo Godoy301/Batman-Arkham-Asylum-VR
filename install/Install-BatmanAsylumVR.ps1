@@ -98,14 +98,22 @@ if (-not $DataDir) { $DataDir = Join-Path $env:LOCALAPPDATA 'Batman_Asylum' }
 # A VR launch that was cut short leaves its temporary graphics settings in place: put the player's back first.
 $journal = Join-Path $DataDir 'profile-active.json'
 if (Test-Path -LiteralPath $journal) {
+    # A file already equal to its original is skipped: a Documents copy Windows would not let us write (Controlled
+    # folder access, permissions) was never changed, and writing it again here stopped the reinstall (WRITEDENIED).
     $prof = Get-Content -LiteralPath $journal -Raw | ConvertFrom-Json
+    $left = @()
     foreach ($file in $prof.files) {
+        if ((Test-Path -LiteralPath $file.path) -and (Get-FileHash -LiteralPath $file.path).Hash -eq $file.sha256) { continue }
         if ((Test-Path -LiteralPath $file.backup) -and (Get-FileHash -LiteralPath $file.backup).Hash -eq $file.sha256) {
-            [IO.File]::WriteAllBytes($file.path, [IO.File]::ReadAllBytes($file.backup))
+            try { [IO.File]::WriteAllBytes($file.path, [IO.File]::ReadAllBytes($file.backup)) }
+            catch { $left += $file.path; Say "  Windows did not allow $($file.path) to be put back. Your original is saved at $($file.backup)." Yellow }
         }
     }
-    Remove-Item -LiteralPath $journal -Force
-    Say '  Settings from an interrupted VR launch were put back first.' Yellow
+    if ($left.Count) { Say '  The VR launcher will try again and tell you what to do.' Yellow }
+    else {
+        Remove-Item -LiteralPath $journal -Force
+        Say '  Settings from an interrupted VR launch were put back first.' Yellow
+    }
 }
 
 # ---- 2. someone else's d3d9.dll / xinput1_3.dll (another mod): keep it, the uninstaller puts it back ------------

@@ -48,10 +48,16 @@ if (-not $Yes) {
 # ---- a VR launch that was cut short: its temporary graphics settings go first ------------------------------
 $journal = Join-Path $DataDir 'profile-active.json'
 if (Test-Path -LiteralPath $journal) {
+    # Skip files already equal to their original (a write Windows refused never changed them, WRITEDENIED). If one
+    # really cannot be put back, stop BEFORE the data folder (which holds the originals) is deleted.
     $prof = Get-Content -LiteralPath $journal -Raw | ConvertFrom-Json
     foreach ($file in $prof.files) {
+        if ((Test-Path -LiteralPath $file.path) -and (Get-FileHash -LiteralPath $file.path).Hash -eq $file.sha256) { continue }
         if ((Test-Path -LiteralPath $file.backup) -and (Get-FileHash -LiteralPath $file.backup).Hash -eq $file.sha256) {
-            [IO.File]::WriteAllBytes($file.path, [IO.File]::ReadAllBytes($file.backup))
+            try { [IO.File]::WriteAllBytes($file.path, [IO.File]::ReadAllBytes($file.backup)) }
+            catch { Fail ("Windows did not allow your graphics settings file $($file.path) to be put back. Your original is " +
+                          "saved at $($file.backup). Copy it back by hand, or allow PowerShell in Windows Security > Ransomware " +
+                          'protection > Controlled folder access, then run the uninstaller again. Nothing was removed.') }
         }
     }
     Remove-Item -LiteralPath $journal -Force

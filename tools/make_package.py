@@ -9,7 +9,7 @@ import argparse, hashlib, os, re, shutil, sys, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-VERSION = '0.1.2'
+VERSION = '0.1.3'
 ap = argparse.ArgumentParser()
 ap.add_argument('--settings', default=os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Batman_Asylum', 'aa_rendering.ini'))
 a = ap.parse_args()
@@ -47,6 +47,10 @@ b64 = os.path.join(ROOT, 'build64', 'Release')
 put(os.path.join(b64, 'aa_dlss64.exe'), os.path.join(av, 'DLSS', 'aa_dlss64.exe'))
 put(os.path.join(b64, 'nvngx_dlss.dll'), os.path.join(av, 'DLSS', 'nvngx_dlss.dll'))
 put(a.settings, os.path.join('files', 'aa_rendering.ini'))
+# FIRSTPERSON: new players start in third person whatever JJ last used (City SHIP_OVERRIDES first_person=0).
+sp = os.path.join(stage, 'files', 'aa_rendering.ini')
+st = open(sp, encoding='latin-1').read()
+open(sp, 'w', encoding='latin-1', newline='').write(re.sub(r'(?im)^FirstPerson=1', 'FirstPerson=0', st))
 open(os.path.join(stage, 'files', 'version.txt'), 'w', newline='\n').write(VERSION + '\n')
 for f in ('README.md', 'LICENSE-bioshock-vr.txt', 'LICENSE-luma-framework.md', 'LICENSE-NVAPI.txt', 'THIRD_PARTY_NOTICES.md'):
     put(os.path.join(ROOT, f), f)
@@ -61,7 +65,7 @@ for dp, _, fs in os.walk(stage):
             if b.count(b'\n') != b.count(b'\r\n'): bad.append(f + ': not CRLF')
 for f in ('d3d9.dll', 'xinput1_3.dll'):
     if b'[batman_asylum-proxy]' not in open(os.path.join(stage, f), 'rb').read(): bad.append(f + ' is not ours')
-if b'Asylum-0.1.2' not in open(os.path.join(stage, 'batman_asylum.dll'), 'rb').read(): bad.append('batman_asylum.dll is not the 0.1.2 build')
+if b'Asylum-0.1.3' not in open(os.path.join(stage, 'batman_asylum.dll'), 'rb').read(): bad.append('batman_asylum.dll is not the 0.1.3 build')
 st = open(os.path.join(stage, 'files', 'aa_rendering.ini'), encoding='latin-1').read()
 if '[AsylumVR]' not in st: bad.append('aa_rendering.ini lacks [AsylumVR]')
 if re.search(r'(?im)^(AutoCaptures|HideTargetlessGrapple|FixStaleParticles)\s*=\s*1', st): bad.append('aa_rendering.ini has a test switch on')

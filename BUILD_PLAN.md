@@ -1,3 +1,61 @@
+## RELEASE 0.1.3 (2026-10-20, JJ: "deploy both of those to github")
+
+First person (FIRSTPERSON, below) + launcher access-denied fix (WRITEDENIED, below). Version 0.1.3 (CMake, package, panel title).
+11/11 offline checks pass; package zip sha256 5a55cfbee38799a45d701d5636023579a04b0fe39e5e1d71bcc663c06fd6caa5, installed on
+JJ's game by the package installer. First person HEADSET pending (shipped OFF by default, listed as new in Known issues).
+
+## FIRSTPERSON - City's first-person mode (JJ 2026-10-20: "add the same first person mode we have for the other arkham games ... add it to origins too")
+
+Looked up: memory batman-city-first-person + ak-first-person; batman_city BATMAN_CITY_PLAN FIRSTPERSON / HEADCAM / FPGATE and scene.cpp fp_update / fp_head_follow / fp_apply (the donor); memory origins-port-city-fixes-by-code-shape (method); Origins never got first person (ORIGINS_PLAN P7 planned only). Playbook/framework: City already cites CAM-001/CAM-013, FAIL-CAM-020, guide 13 (REFramework FirstPerson) - nothing new needed for a straight port.
+
+What it is (City's, unchanged): panel FIRST PERSON (top) or both sticks clicked twice quickly; camera at Batman's eye point
+(Location + EyeHeight) following his Bip01_Head bone (smoothed 0.08 s, capped 140 UU), 25 cm in front of his face (head
+not hidden), look direction stays the game camera's. Gate (FPGATE): front-end menu level (engine IsMenuLevel, per pair); no pause signal in Asylum yet, so first person stays on behind the pause menu, or the game camera more than 12 m from him (main
+menu stand-in pawn) - the setting stays on. Saved in aa_rendering.ini [AsylumVR] FirstPerson / FirstPersonForwardCm / FirstPersonUpCm / FirstPersonHead / FirstPersonHeadSmooth; the package ships it OFF. Commands `aa fp on|off|fwd N|up N|head 0|1|smooth S|status`.
+
+STATIC RE 2026-10-20 (scratch scanner on the retail exe, City's functions found by identical code shape):
+| | City | Asylum |
+|---|---|---|
+| GetPawnViewLocation | 0x7A6970 | 0x867C30: Location +0x54, EyeHeight +0x284 |
+| GetViewRotation | 0x7BA650 | 0x87B650: Controller +0x1B4, Rotation +0x60 |
+| Pawn.Mesh | +0x36C | +0x348 (game's own head read 0x8A1178; EyeHeight->Mesh 0xC4 as City) |
+| Head bone | GetBoneLocation 0x850EE0, FName 0x620 | FName ctor 0x5D5620 (L"Bip01_Head",1,1; ret 0xC) -> MatchRefBone 0x90E8E0 (ret 8, SkeletalMesh +0x1B0) -> GetBoneMatrix 0x91D2A0 (out, index; ret 8), row 3 = world position. No GetBoneLocation of City's shape. |
+Player -> controller (City +0x30) and controller -> pawn are found LIVE by the pawn's back-pointer (log line "first person:
+player +0x.. = controller .., its +0x.. = Batman"). Hook: native_stereo.cpp calc() (first eye pass) computes the eye point; ctor() moves the validated view before the eye deltas, so markers / particles / AFW follow the moved camera and the between-eyes check still holds.
+
+Built + offline checks pass + installed via the player package (local build, not released). HEADSET pending.
+
+### TEST PLAN FIRSTPERSON (JJ drives, one launch)
+| # | do | look for | log |
+|---|---|---|---|
+| 1 | VR shortcut, main menu | normal menu 3D (first person must NOT move the menu camera even if on) | "first person paused: ..." |
+| 2 | gameplay, both sticks clicked twice quickly | view jumps to Batman's eyes, cowl not in view | "player +0x.. = controller", "head: name Bip01_Head", "eye point" |
+| 3 | walk, run, jump/glide, a fight/takedown | camera stays at his head, no shaking, not inside his head | head frames rising, "steady eye point" count low |
+| 4 | pause menu / map, then back | menu as before, first person back after | "paused: menu" / "active again" |
+| 5 | panel: untick "camera follows his head" | steadier but head comes through camera on glides | - |
+| 6 | anything wrong: F2 | capture | - |
+Follow-ups: pawn never found -> widen the live scan (player range 0x20-0x80, controller 0x100-0x700); head misses -> log names the
+reason (no mesh / no skeleton / no bone / cap).
+
+## WRITEDENIED - launcher stuck on "Access denied" to a Documents config (player report, 2026-10-20)
+
+Report (via JJ): `UnauthorizedAccessException` at Graphics-Profile.ps1:52 (Restore-AsylumProfile) writing
+`Documents\Square Enix\Batman Arkham Asylum GOTY\BmGame\Config\BmEngine.ini` / `UserEngine.ini`; clearing Read-only and
+reinstalling the game did not help. Cause (SOURCE): Windows refused the first VR write to a Documents copy (most likely
+Controlled folder access, which blocks PowerShell in Documents), so the file was never changed; the restore then
+rewrote EVERY file unconditionally, failed on that one, and left `%LOCALAPPDATA%\Batman_Asylum\profile-active.json`.
+Every later launch, the installer and the uninstaller replay that journal first and hit the same refusal - stuck for
+good, independent of the game install. JJ's PC has no Documents copies, so this path was never exercised.
+Fix (SOURCE, offline check PASS, tests/graphics_profile_check.ps1 extended):
+1. Restore skips any file already equal to its original; one refused file no longer stops the others; one clear
+   error names each file + where its original is saved (journal kept so nothing is lost).
+2. Launch tests every config for write access before changing anything (Select-AsylumWritableConfigs): an unwritable
+   Documents copy is left as it is with a warning and VR starts (command line still sets window + size); an
+   unwritable game-folder file (holds the frame cap) stops with instructions, nothing changed.
+3. Installer: same skip; a refused file only warns (reinstall must always work, it is how players get the fix).
+   Uninstaller: same skip; a refused changed file stops BEFORE the data folder holding the originals is deleted.
+Not yet packaged (needs a version bump + package). Origins' launcher writes a Documents file too: check it.
+
 ## RELEASE 0.1.2 - Pimax menu / HUD double vision (PIMAX2, 2026-10-17)
 
 Report (via JJ): Pimax player, "the main menu and HUD have double vision with OpenXR" (not with SteamVR). Looked up: VR_ESSENTIALS

@@ -2,6 +2,12 @@
 
 README.md is the player page since release 0.1.0; these are the development checkpoints it used to hold.
 
+CURRENT 0.1.3 RELEASED (2026-10-20): FIRSTPERSON + WRITEDENIED; BUILD_PLAN "RELEASE 0.1.3".
+
+CURRENT FIRSTPERSON (2026-10-20, in 0.1.3): City's first-person mode (panel / double-click both sticks). HEADSET pending; BUILD_PLAN "FIRSTPERSON".
+
+CURRENT WRITEDENIED (2026-10-20, in 0.1.3): launcher no longer gets stuck when Windows refuses a Documents config write. BUILD_PLAN "WRITEDENIED".
+
 CURRENT 0.1.2 RELEASED (2026-10-17): Pimax menu/HUD double vision - VD-only per-eye quad shift no longer applied on other runtimes. BUILD_PLAN "RELEASE 0.1.2".
 
 CURRENT 0.1.1 RELEASED (2026-10-17): Pimax fixes - DLSS helper starts in the background (the 6.5 s first-frame wait made Pimax drop the game), SteamVR 32-bit fallback in mod + launcher. See BUILD_PLAN "RELEASE 0.1.1".

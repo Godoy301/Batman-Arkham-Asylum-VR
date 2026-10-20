@@ -12,6 +12,7 @@
 #include "detail9.h"
 #include "billboard9.h"
 #include "markers9.h"
+#include "first_person.h"
 #include "core/vr/openxr_runtime.h"
 #include "core/util/log.h"
 #include <windows.h>
@@ -141,7 +142,10 @@ void __fastcall draw(void*self,void*edx){
  markers9::end_game_pass();eye=0;haveSlot=false;--depth;viewportNow=nullptr;
 }
 void* __fastcall calc(void*self,void*edx,void*family,float*loc,int32_t*rot,void*viewport,W playerIndex){
- bool ours=depth&&viewport==viewportNow;if(ours)++calcDepth;
+ bool ours=depth&&viewport==viewportNow;
+ // FIRSTPERSON: this pair's eye point from the first eye's pass (the second reuses it); self = the ULocalPlayer.
+ if(ours&&eye&&(eye<0||pairAFW))first_person::update(self,pairMode==menu_state::Mode::menu?"main menu":nullptr);
+ if(ours)++calcDepth;
  void*out=calcOriginal(self,edx,family,loc,rot,viewport,playerIndex);
  if(ours)--calcDepth;return out;
 }
@@ -150,6 +154,8 @@ void* __fastcall ctor(void*self,void*edx,A24){
  M v{},p{};
  if(!read(reinterpret_cast<void*>(a15),&v,64)||!read(reinterpret_cast<void*>(a16),&p,64)||!matrices(v,p)||value(a13)<=0||value(a14)<=0){++invalid;if(eye)stop("camera input rejected");return ctorOriginal(self,edx,P24);}
  found=true;if(!eye||!poseValid)return ctorOriginal(self,edx,P24);
+ // FIRSTPERSON: the game camera at his eyes; both eyes move alike, so the between-eyes check below still holds.
+ first_person::apply(v.v,90.f);
  if(eye<0||pairAFW){firstView=v;firstProjection=p;firstRect[0]=a11;firstRect[1]=a12;firstRect[2]=a13;firstRect[3]=a14;
   static unsigned rectLogs=0;if(rectLogs++<3)BVR_LOG("[aa native] raw main rect %.0f,%.0f %.0fx%.0f; actual source %ux%u; pose generation %u",value(a11),value(a12),value(a13),value(a14),width.load(),height.load(),generation);
  }
@@ -202,7 +208,7 @@ struct Seam{W rva;const char*sig;unsigned relocation;void*hook;void**orig;};
 bool install(){
  base=uintptr_t(GetModuleHandleW(nullptr));
  menu_state::install(base);
- wchar_t settings[MAX_PATH];swprintf_s(settings,L"%s\\aa_rendering.ini",log::data_dir());centredLens=GetPrivateProfileIntW(L"AsylumVR",L"LightingCompatibility",1,settings)!=0;
+ wchar_t settings[MAX_PATH];swprintf_s(settings,L"%s\\aa_rendering.ini",log::data_dir());centredLens=GetPrivateProfileIntW(L"AsylumVR",L"LightingCompatibility",1,settings)!=0;first_person::install(base,settings);
  const Seam seams[]={{0x8cae50,"6aff689225cd0164a1000000005081ec",3,(void*)draw,(void**)&drawOriginal},{0x49e620,"558bec83e4f06aff686930c90164a100",9,(void*)calc,(void**)&calcOriginal},{0x6ecc60,"558bec83e4f06aff68da53cb0164a100",9,(void*)ctor,(void**)&ctorOriginal},{0x6f25a0,"6aff68cb5acb0164a1000000005051a1",3,nullptr,nullptr}};
  for(const auto&s:seams){BYTE expected[16]{},actual[16]{};for(int n=0;n<16;n++){unsigned v;sscanf_s(s.sig+2*n,"%2x",&v);expected[n]=BYTE(v);}if(s.relocation){W ptr;memcpy(&ptr,expected+s.relocation,4);ptr+=W(base-0x400000);memcpy(expected+s.relocation,&ptr,4);}if(!read((void*)(base+s.rva),actual,16)||memcmp(expected,actual,16)){BVR_LOG("[aa native] Asylum seam guard failed at RVA %08X",s.rva);return false;}}
  bool ok=markers9::install_engine(base);for(const auto&s:seams)if(s.hook){if(MH_CreateHook((void*)(base+s.rva),s.hook,s.orig)!=MH_OK){ok=false;break;}MH_QueueEnableHook((void*)(base+s.rva));}

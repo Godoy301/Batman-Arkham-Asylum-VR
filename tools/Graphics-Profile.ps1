@@ -46,10 +46,37 @@ function Get-AsylumProfileStatus([string[]]$Paths) {
         @{path=$path;sha256=(Get-FileHash -LiteralPath $path).Hash;values=$values}
     }
 }
+function Test-AsylumConfigWritable([string]$Path) {
+    # Opens for writing without changing a byte; returns why Windows refused, or nothing. Catches the Read-only
+    # attribute, NTFS permissions and Windows Security's Controlled folder access (blocks PowerShell in Documents).
+    try {[IO.File]::Open($Path,'Open','Write','ReadWrite').Dispose()}
+    catch {return $_.Exception.GetBaseException().Message}
+}
+function Select-AsylumWritableConfigs([string]$GameDir,[string[]]$Paths) {
+    # Player report 2026-10-20 (WRITEDENIED): a Documents copy Windows will not let us write is left as it is and
+    # the launch goes on (the command line still sets window and size). The game folder's own two files hold the
+    # frame cap, so those must be writable; nothing has been changed when this stops.
+    $root=[IO.Path]::GetFullPath($GameDir).TrimEnd('\','/')+'\'
+    foreach($path in $Paths) {
+        $why=Test-AsylumConfigWritable $path
+        if(!$why) {$path;continue}
+        if([IO.Path]::GetFullPath($path).StartsWith($root,[StringComparison]::OrdinalIgnoreCase)) {
+            throw "Windows does not allow changes to the game's settings file $path ($why). Untick Read-only in its Properties, or allow PowerShell in Windows Security > Virus & threat protection > Ransomware protection > Controlled folder access, then start VR again. Nothing was changed."
+        }
+        Write-Warning "Windows does not allow changes to $path ($why). It is left as it is and VR starts anyway; if the game runs capped or fullscreen, untick Read-only on that file or allow PowerShell in Windows Security > Ransomware protection > Controlled folder access."
+    }
+}
 function Restore-AsylumProfile($Profile) {
+    # A file already equal to its original is left alone: a write Windows refused at launch must not also fail
+    # here, or the journal stays and every later launch, install and uninstall stops on it (WRITEDENIED).
+    # One file that cannot be put back does not stop the others; the error at the end names each one.
+    $failed=@()
     foreach($record in $Profile.files) {
+        if((Test-Path -LiteralPath $record.path) -and (Get-FileHash -LiteralPath $record.path).Hash -eq $record.sha256) {continue}
         if((Get-FileHash -LiteralPath $record.backup).Hash -ne $record.sha256) {throw "Profile backup changed: $($record.backup)"}
-        [IO.File]::WriteAllBytes($record.path,[IO.File]::ReadAllBytes($record.backup))
+        try {[IO.File]::WriteAllBytes($record.path,[IO.File]::ReadAllBytes($record.backup))}
+        catch {$failed+="$($record.path) ($($_.Exception.GetBaseException().Message)); your original is saved at $($record.backup)";continue}
         if((Get-FileHash -LiteralPath $record.path).Hash -ne $record.sha256) {throw "Profile restore failed: $($record.path)"}
     }
+    if($failed.Count) {throw "Windows did not allow your original graphics settings to be put back: $($failed -join '; '). Copy each original back by hand, or allow PowerShell in Windows Security > Ransomware protection > Controlled folder access, then start VR again."}
 }

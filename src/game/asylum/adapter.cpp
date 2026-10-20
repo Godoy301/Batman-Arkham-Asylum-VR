@@ -14,6 +14,7 @@
 #include "afw.h"
 #include "window.h"
 #include "detail9.h"
+#include "first_person.h"
 #include "core/ui/overlay.h"
 #include "core/input/xinput_bridge.h"
 #include "core/framework/command.h"
@@ -152,10 +153,11 @@ void on_present(IDXGISwapChain* sc) {
 bool testOptions=false;
 bool test_options(){return testOptions;}
 void draw_ui() {
-    ImGui::TextUnformatted("Batman Asylum VR 0.1.2");
+    ImGui::TextUnformatted("Batman Asylum VR 0.1.3");
     ImGui::TextWrapped("F10 or hold both sticks to open/close. Settings save automatically.");
     stereo_history::draw_ui();
     if(ImGui::Button("Recentre view and screens")){vr::recenter_panel();native::recenter();bridge::recenter_hud();}
+    first_person::draw_ui(); // FIRSTPERSON: near the top, it changes the whole view (City)
     if(ImGui::CollapsingHeader("VR RESOLUTION",ImGuiTreeNodeFlags_DefaultOpen))window::draw_ui();
     if(ImGui::CollapsingHeader("STEREO RENDERING",ImGuiTreeNodeFlags_DefaultOpen)){
         if(ImGui::RadioButton("Native (both eyes drawn every frame)",native::selected()&&!afw::on())){afw::set_on(false);native::select(true);}
@@ -217,6 +219,7 @@ bool handle_command(const char* args) {
     else if(!_stricmp(args,"tracking off"))hud9::set_fast_tracking(false);
     else if(!_stricmp(args,"dlss reset"))dlss::reset();
     else if(!_strnicmp(args,"afw ",4))return afw::command(args+4);
+    else if(!_strnicmp(args,"fp ",3))return first_person::command(args+3);
     else if(!_strnicmp(args,"grapple ",8))return markers9::command(args+8);
     else if(!_stricmp(args,"eyesame"))eyesame9::request();
     else if(!_strnicmp(args,"stale ",6))return xform9::command(args+6);

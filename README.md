@@ -24,6 +24,8 @@ nothing lags behind when the camera swings. Made the same way as
   pointer near the edge of your view shows which way it is.
 - **Detective mode details** (the lines and rings on people) point at the people they belong to.
 - **Menus and loading screens** on a screen in the room.
+- **First person, if you want it**: tick FIRST PERSON in the VR menu, or click both thumbsticks twice quickly. The
+  camera sits at Batman's eyes and follows his head; it switches back by itself on the main menu and in movies, and whenever the game moves its camera away from him.
 - **An in-headset VR menu**: hold both thumbsticks down (or press F10). Render size, DLSS, HUD size and distance, and
   more. Settings are saved.
 
@@ -60,6 +62,7 @@ from Steam still plays the normal flat game.
 |---|---|
 | VR menu | hold both thumbsticks down for half a second, or F10 |
 | Recenter | the VR menu's "Recentre view and screens" button |
+| First person on / off | the VR menu's FIRST PERSON, or click both thumbsticks twice quickly |
 | Save the last 10 seconds of both eyes | the VR menu's save button, or F2 |
 
 ## Known issues
@@ -67,6 +70,8 @@ from Steam still plays the normal flat game.
 - Spent shotgun shells on the floor show at the wrong depth (they look far away).
 - Some menu changes can briefly show a black window.
 - AFW (one eye drawn, the other warped) is in the VR menu but is experimental: use Native.
+- First person is new: Batman's head is not hidden (the camera sits just in front of his face), and it stays first
+  person behind the pause menu.
 
 ## If something is wrong
 
@@ -77,6 +82,7 @@ from Steam still plays the normal flat game.
 | The installer stops: "the game has not made its settings yet" | Start the game once from Steam, wait for the main menu, quit, run the installer again. |
 | The installer or launcher says the game is a different version | The mod works only with the Steam Game of the Year Edition. |
 | Pimax (or other VR software with no 32-bit OpenXR runtime): nothing in the headset | The shortcut then uses SteamVR's 32-bit runtime by itself: install SteamVR. Do not run Steam or the game as administrator. |
+| The launcher says Windows does not allow changes to a settings file ("Access denied") | Usually Windows Security's "Controlled folder access". Allow PowerShell there (Virus & threat protection > Ransomware protection > Allow an app through Controlled folder access), or untick Read-only on the file it names. A settings file in Documents that cannot be changed is left as it is and VR starts anyway. |
 | Low frame rate | VR menu: lower the render size (VR resolution), or choose a faster DLSS setting. |
 
 ## Removing it
