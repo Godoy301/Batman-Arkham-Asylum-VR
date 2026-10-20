@@ -26,6 +26,9 @@ nothing lags behind when the camera swings. Made the same way as
 - **Menus and loading screens** on a screen in the room.
 - **First person, if you want it**: tick FIRST PERSON in the VR menu, or click both thumbsticks twice quickly. The
   camera sits at Batman's eyes and follows his head; it switches back by itself on the main menu and in movies, and whenever the game moves its camera away from him.
+- **Headset aim and HUD in first person**: enable "aim and HUD follow the headset" under FIRST PERSON. Look to aim;
+  the right stick still turns the base camera. This fork's development change needs in-game validation; see
+  [the test instructions and logs](HEAD_AIM_TESTING.md).
 - **An in-headset VR menu**: hold both thumbsticks down (or press F10). Render size, DLSS, HUD size and distance, and
   more. Settings are saved.
 

@@ -117,6 +117,7 @@ void __fastcall draw(void*self,void*edx){
  // actual CalcSceneView->constructor has already passed matrix validation.
  const bool active=ready&&wantNative&&!failed&&poseValid&&width&&height&&owner==ra&&renders;
  pairMode=menu_state::current(); // One engine-state snapshot shared by both eyes.
+ if(renders)first_person::begin_frame(active,pairMode==menu_state::Mode::gameplay,generation);
  pairCentred=centredLens.load();pairAFW=active&&afw::on();
  pairInputWidth=width;pairInputHeight=height;
  if(active&&pairCentred){float crop[2][4];for(int e=0;e<2;++e)math::lens_crop(angles[e],crop[e]);
@@ -155,7 +156,7 @@ void* __fastcall ctor(void*self,void*edx,A24){
  if(!read(reinterpret_cast<void*>(a15),&v,64)||!read(reinterpret_cast<void*>(a16),&p,64)||!matrices(v,p)||value(a13)<=0||value(a14)<=0){++invalid;if(eye)stop("camera input rejected");return ctorOriginal(self,edx,P24);}
  found=true;if(!eye||!poseValid)return ctorOriginal(self,edx,P24);
  // FIRSTPERSON: the game camera at his eyes; both eyes move alike, so the between-eyes check below still holds.
- first_person::apply(v.v,90.f);
+ const bool headHud=first_person::apply(v.v,90.f,head);
  if(eye<0||pairAFW){firstView=v;firstProjection=p;firstRect[0]=a11;firstRect[1]=a12;firstRect[2]=a13;firstRect[3]=a14;
   static unsigned rectLogs=0;if(rectLogs++<3)BVR_LOG("[aa native] raw main rect %.0f,%.0f %.0fx%.0f; actual source %ux%u; pose generation %u",value(a11),value(a12),value(a13),value(a14),width.load(),height.load(),generation);
  }
@@ -165,7 +166,7 @@ void* __fastcall ctor(void*self,void*edx,A24){
   for(auto&s:states)if(s.left==a2||!s.left){if(!s.left){s.left=a2;s.right=reinterpret_cast<Alloc>(base+0x6f25a0)();BVR_LOG("[aa native] independent right history %08X -> %p",a2,s.right);}if(s.right){a2=W(s.right);have=true;}break;}
   if(!have){stop("right history allocation failed");return ctorOriginal(self,edx,P24);}
  }
- if(haveSlot){M markerEyes[2]{},markerViews[2]{};for(int i=0;i<2;++i){markerViews[i]=mul(firstView,delta(eyes[i]));markerEyes[i]=mul(markerViews[i],lens(firstProjection,i));}markers9::publish(gameSlot,draws.load(),generation,self,firstView,firstProjection,markerEyes,yawRef,posRef,markerViews);}
+ if(haveSlot){M markerEyes[2]{},markerViews[2]{};for(int i=0;i<2;++i){markerViews[i]=mul(firstView,delta(eyes[i]));markerEyes[i]=mul(markerViews[i],lens(firstProjection,i));}markers9::publish(gameSlot,draws.load(),generation,self,firstView,firstProjection,markerEyes,yawRef,posRef,markerViews,headHud);}
  const int e=eye<0?0:1;v=mul(v,delta(eyes[e]));
  // Particle expansion gets the game camera's orientation/centre, while its
  // projection keeps this real eye. Compute centre delta in the game frame,
@@ -176,7 +177,7 @@ void* __fastcall ctor(void*self,void*edx,A24){
   billboard9::publish(gameSlot,&firstView.v[0][0],&v.v[0][0],centreDelta,pairMode);
  }}
  M outputProjection=lens(p,e);p=pairCentred?math::centred_projection(p,angles[e]):outputProjection;
- Camera camera{};camera.view=v;camera.projection=outputProjection;camera.generation=generation;camera.width=width;camera.height=height;camera.eye=e;camera.valid=true;camera.centred=pairCentred;camera.afw=pairAFW;
+ Camera camera{};camera.view=v;camera.projection=outputProjection;camera.generation=generation;camera.width=width;camera.height=height;camera.eye=e;camera.valid=true;camera.centred=pairCentred;camera.afw=pairAFW;camera.headHud=headHud;
  camera.inputWidth=pairInputWidth;camera.inputHeight=pairInputHeight;
  memcpy(camera.angles,angles[e],sizeof(camera.angles));if(pairCentred)math::lens_crop(angles[e],camera.crop);
  camera.jitterX=pairJitterX;camera.jitterY=pairJitterY;
@@ -249,6 +250,14 @@ void on_present(IDXGISwapChain*sc){
 }
 void discard_present(){renderedCamera={};haveRenderSlot=false;presentSequence.reset();renderEye=0;billboard9::begin_render(0,false);vr::set_camera_mode(false);vr::sr_set_present_eye(0);vr::sr_set_present_gen(0);}
 bool camera(Camera& out){out=renderedCamera;return renderEye!=0&&out.valid&&out.eye==(renderEye<0?0:1);}
+bool head_hud(uint32_t gen){
+ bool result=false;AcquireSRWLockShared(&tagLock);
+ // DLSS may finish the left after another eye was submitted. Match its exact
+ // pose generation, never a live toggle or the newest render-thread camera.
+ for(unsigned n=0;n<64&&n<writeTag;++n){const auto&t=tags[(writeTag-1-n)%64];
+  if(t.viewValid&&t.camera.generation==gen){result=t.camera.headHud;break;}}
+ ReleaseSRWLockShared(&tagLock);return result;
+}
 bool afw_present(){return renderEye!=0&&renderedCamera.valid&&renderedCamera.afw;}
 void set_centred(bool on){centredLens=on;dlss::reset();afw::reset();wchar_t settings[MAX_PATH];swprintf_s(settings,L"%s\\aa_rendering.ini",log::data_dir());WritePrivateProfileStringW(L"AsylumVR",L"LightingCompatibility",on?L"1":L"0",settings);BVR_LOG("[aa native] scene lens %s; XR retains actual asymmetric lens",on?"centred enclosure":"direct asymmetric");}
 bool centred(){return centredLens;}

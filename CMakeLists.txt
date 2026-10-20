@@ -15,7 +15,7 @@ add_library(batman_asylum SHARED ${CORE_SOURCES} src/hash.cpp src/game/adapter_r
  src/game/asylum/window.cpp src/game/asylum/afw.cpp src/game/asylum/detail9.cpp src/game/asylum/pipeline_cache.cpp src/game/asylum/dynamic_pipeline.cpp src/game/asylum/managed9.cpp src/game/asylum/native9_bridge.cpp src/game/asylum/billboard9.cpp src/game/asylum/markers9.cpp src/game/asylum/menu_state.cpp src/game/asylum/transitions9.cpp src/game/asylum/first_person.cpp)
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
 file(WRITE "${CMAKE_BINARY_DIR}/generated/bvr_version.h"
- "#pragma once\n#define BVR_VERSION \"${PROJECT_VERSION}\"\n#define BVR_BUILD_ID \"Asylum-0.1.4-HEADLOCK\"\n")
+ "#pragma once\n#define BVR_VERSION \"${PROJECT_VERSION}\"\n#define BVR_BUILD_ID \"Asylum-0.1.4-HEAD-AIM\"\n")
 target_include_directories(batman_asylum PRIVATE src "${CMAKE_BINARY_DIR}/generated")
 target_link_libraries(batman_asylum PRIVATE minhook imgui openxr_loader d3d11 d3d12 dxgi d3dcompiler dbghelp windowscodecs ole32 bcrypt psapi dxguid)
 target_compile_definitions(batman_asylum PRIVATE BVR_WITH_OPENXR)
@@ -49,3 +49,7 @@ if(EXISTS "E:/Games/Steam/steamapps/common/Batman Arkham Asylum GOTY/Binaries/Sh
  find_program(ASYLUM_PYTHON NAMES python.exe REQUIRED)
  add_test(NAME asylum_target_abi COMMAND "${ASYLUM_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/asylum_abi_check.py")
 endif()
+
+add_executable(asylum_head_aim_check tests/head_aim_check.cpp)
+target_include_directories(asylum_head_aim_check PRIVATE src third_party/OpenXR-SDK/include)
+add_test(NAME first_person_head_aim COMMAND asylum_head_aim_check)

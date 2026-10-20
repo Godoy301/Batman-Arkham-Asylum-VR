@@ -2422,3 +2422,25 @@ once-only UI side effects, headset fusion, shaders/reflections or endurance.
 
 ## FIRSTPERSON (STATIC 2026-10-20)
 Pawn / head-bone offsets for first person, found by City's code shape: table and evidence in BUILD_PLAN "FIRSTPERSON"; code comment at the top of src/game/asylum/first_person.cpp.
+
+## HEAD-AIM (fork development)
+
+Reuses the Asylum Controller.Rotation +0x60 layout documented above and in
+BUILD_PLAN FIRSTPERSON, with the existing live pawn +0x1B4 controller backlink.
+No new native seam or donor address was inferred. Writes run on the game thread
+after the main-view matrix and first-person distance gates, once per draw pair.
+The previous owned yaw/pitch contribution is removed before adding the current
+head orientation; new stick/engine deltas remain. The render view uses that body
+basis and the original full per-eye XR transform once. Both eyes share the cached
+first-person view. Readback and restoration failures are counted.
+
+The HUD uses one head-centred plane built from the two exact-generation eye
+poses. Detective callout projection reconstructs that moving plane with its
+own game-pass generation instead of using old compositor corners. Target markers
+retain their world positions. Third-person and disabled head-aim paths retain
+the existing room plane.
+
+CPU math evidence is in tests/head_aim_check.cpp. Controller readback is not
+evidence of gadget consumption: simulation may use the previous tick's rotation.
+Pause/cinematic gating and actual target/impact correspondence remain retail
+checks. See HEAD_AIM_TESTING.md for the grouped session and log fields.

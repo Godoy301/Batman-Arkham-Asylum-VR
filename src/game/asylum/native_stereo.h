@@ -3,8 +3,9 @@
 #include <cstdint>
 struct IDXGISwapChain;
 namespace bvr::aa::native {
-struct Camera {math::M view{},projection{};float angles[4]{},crop[4]{1,1,0,0};float jitterX{},jitterY{};uint32_t generation{},width{},height{},inputWidth{},inputHeight{};int eye{};bool valid{},centred{},afw{};};
+struct Camera {math::M view{},projection{};float angles[4]{},crop[4]{1,1,0,0};float jitterX{},jitterY{};uint32_t generation{},width{},height{},inputWidth{},inputHeight{};int eye{};bool valid{},centred{},afw{},headHud{};};
 bool camera(Camera&);
+bool head_hud(uint32_t generation);
 bool afw_present();
 void set_centred(bool);
 bool centred();
