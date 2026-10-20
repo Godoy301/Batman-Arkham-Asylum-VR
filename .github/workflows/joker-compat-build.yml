@@ -1,0 +1,69 @@
+name: Joker compatibility Win32 build
+
+on:
+  push:
+    branches:
+      - "compat/joker-dlc-patcher"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-win32:
+    runs-on: windows-2022
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure Win32 build
+        run: cmake -S . -B build-native9 -G "Visual Studio 17 2022" -A Win32
+
+      - name: Build native VR DLL and companion binaries
+        run: cmake --build build-native9 --config Release --parallel
+
+      - name: Run deterministic compatibility tests
+        run: ctest --test-dir build-native9 -C Release --output-on-failure -R "scene_and_canvas_projection|render_size_fits_desktop|opening_movie_identity"
+
+      - name: Parse PowerShell compatibility scripts
+        shell: pwsh
+        run: |
+          $files = @(
+            'tools/Launch-VR.ps1',
+            'tools/Apply-JokerCompatBuild.ps1',
+            'tools/Install-Joker-Compatibility.ps1',
+            'tools/Install-VR.ps1',
+            'install/Install-BatmanAsylumVR.ps1'
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file).Path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count) {
+              $parseErrors | ForEach-Object { Write-Error "${file}: $($_.Message) at line $($_.Extent.StartLineNumber)" }
+              throw "PowerShell parse failed: $file"
+            }
+            Write-Host "PowerShell parse passed: $file"
+          }
+
+      - name: Stage test payload
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force staging | Out-Null
+          Copy-Item build-native9/Release/batman_asylum.dll staging/
+          Copy-Item build-native9/Release/d3d9.dll staging/
+          Copy-Item build-native9/Release/xinput1_3.dll staging/
+          Copy-Item build-native9/Release/aa_xr_config32.exe staging/
+          Copy-Item tools/Launch-VR.ps1 staging/
+          Copy-Item tools/Apply-JokerCompatBuild.ps1 staging/
+          Copy-Item tools/Install-Joker-Compatibility.ps1 staging/
+          Copy-Item tools/Install-Joker-Compatibility.bat staging/
+          Copy-Item install/Install-BatmanAsylumVR.ps1 staging/
+          Copy-Item JOKER-DLC-COMPATIBILITY.md staging/README-Joker-Compatibility.md
+
+      - name: Upload build artifacts for testing (not a release package)
+        uses: actions/upload-artifact@v4
+        with:
+          name: asylumvr-joker-compat-win32
+          if-no-files-found: error
+          path: staging/*
