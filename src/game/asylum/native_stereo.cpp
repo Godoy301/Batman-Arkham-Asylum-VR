@@ -116,8 +116,8 @@ void __fastcall draw(void*self,void*edx){
  // Select only this target's observed ordinary viewport and an owner whose
  // actual CalcSceneView->constructor has already passed matrix validation.
  const bool active=ready&&wantNative&&!failed&&poseValid&&width&&height&&owner==ra&&renders;
- pairMode=menu_state::current(); // One engine-state snapshot shared by both eyes.
- if(renders)first_person::begin_frame(active,pairMode==menu_state::Mode::gameplay,generation);
+ const auto mode=menu_state::observe();pairMode=mode.mode; // One snapshot shared by both eyes.
+ if(renders)first_person::begin_frame(active,mode,generation);
  pairCentred=centredLens.load();pairAFW=active&&afw::on();
  pairInputWidth=width;pairInputHeight=height;
  if(active&&pairCentred){float crop[2][4];for(int e=0;e<2;++e)math::lens_crop(angles[e],crop[e]);

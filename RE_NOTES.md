@@ -2444,3 +2444,24 @@ CPU math evidence is in tests/head_aim_check.cpp. Controller readback is not
 evidence of gadget consumption: simulation may use the previous tick's rotation.
 Pause/cinematic gating and actual target/impact correspondence remain retail
 checks. See HEAD_AIM_TESTING.md for the grouped session and log fields.
+
+## HEAD-AIM2 (retail gate failure)
+
+User-supplied HEAD-AIM status: native paired scene, enabled/requested=1,
+active=0, writes=0, reason=not gameplay, fpFrames=14354, headFrames=7177,
+headMisses=0. Particle unknownStock=54338 (menuStock=0) confirms the shared
+menu-state observation was unknown, not positive menu evidence. All 256 trace
+samples were inactive (249 not-gameplay, 7 native-pose-unavailable). Thus the
+new direction write and head HUD were never exercised; the first-person pawn
+and camera path was already running. This is a gate defect in HEAD-AIM.
+
+Keep the menu reader's existing offsets/validation and record its failure
+stage/count/capacity. Only head aim gains a fallback to the established native
+first-person guards: valid controlled pawn/controller reciprocal relationship,
+finite eye position, validated main camera within the existing 12m limit.
+Known menu, disabled settings, absent native pose and VR input ownership still
+deny writes. Unknown remains unknown in diagnostics and other consumers.
+The portable production gate regression covers this captured failure and the
+remaining denials. Retail gadget consumption and unrecognized menus/cinematics
+remain unverified; HEAD-AIM2 is the first build able to reach the drive on this
+reported setup.

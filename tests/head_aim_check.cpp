@@ -31,6 +31,26 @@ bool aim_matches(const h::Solution&s,const HeadPose&p) {
         near(std::cos(tp)*std::sin(ty),expected[1]) && near(std::sin(tp),expected[2]);
 }
 int main(){
+    // Retail HEAD-AIM report: native paired scene + valid first-person pawn,
+    // but IsMenuLevel unknown (particles unknownStock>0), writes=0 forever.
+    // That is missing menu evidence, not a positive menu verdict. Exercise the
+    // SAME decision policy used by begin_frame/apply, then the actual aim math.
+    using Mode=bvr::aa::menu_state::Mode;
+    h::Context live{true,true,true,false,Mode::unknown};
+    CHECK(live.evaluate(false,false)==h::Gate::needPawn);
+    CHECK(!h::permits(live.evaluate(false,true)));
+    CHECK(live.evaluate(true,false)==h::Gate::needCamera);
+    CHECK(live.evaluate(true,true)==h::Gate::activePawnFallback);
+    h::Tracker regression;h::Solution driven;
+    CHECK(h::permits(live.evaluate(true,true))&&regression.solve({0,0,0},pose(20,35,0),driven));
+    CHECK(driven.target.pitch!=0&&driven.target.yaw!=0&&aim_matches(driven,pose(20,35,0)));
+    auto denied=live;denied.mode=Mode::menu;CHECK(denied.evaluate(true,true)==h::Gate::menu);
+    denied=live;denied.firstPerson=false;CHECK(denied.evaluate(true,true)==h::Gate::off);
+    denied=live;denied.requested=false;CHECK(denied.evaluate(true,true)==h::Gate::optionOff);
+    denied=live;denied.native=false;CHECK(denied.evaluate(true,true)==h::Gate::noNative);
+    denied=live;denied.panel=true;CHECK(denied.evaluate(true,true)==h::Gate::panel);
+    live.mode=Mode::gameplay;CHECK(live.evaluate(true,true)==h::Gate::active);
+    CHECK(!h::permits(live.evaluate(false,true))&&!h::permits(live.evaluate(true,false)));
     h::Tracker t;h::Solution s;h::Rotation current{0,0,1234};
     CHECK(t.solve(current,pose(0,0,0),s));CHECK(s.target.pitch==0&&s.target.yaw==0&&s.target.roll==1234);
     // The trim helper takes positive yaw to the right (negative XR Y angle).
@@ -98,5 +118,5 @@ int main(){
         }
         CHECK(!h::hud_plane(eyes,0,2,1,plane));eyes[1].qw=7;CHECK(!h::hud_plane(eyes,4,2,1,plane));
     }
-    std::printf("PASS: %d checks: independent aim rays, additive stick turns, no accumulated head rotation, recenter/restore, invalid poses, shared HUD stereo and rigid head motion\n",checks);
+    std::printf("PASS: %d checks: retail unknown-menu gating regression, independent aim rays, additive stick turns, no accumulated head rotation, recenter/restore, invalid poses, shared HUD stereo and rigid head motion\n",checks);
 }

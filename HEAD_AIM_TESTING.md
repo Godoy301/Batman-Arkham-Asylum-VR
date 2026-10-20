@@ -1,6 +1,6 @@
 # Primeira pessoa: mira e HUD pelo headset
 
-Build de desenvolvimento: `Asylum-0.1.4-HEAD-AIM`, baseado no fork
+Build de desenvolvimento: `Asylum-0.1.4-HEAD-AIM2`, baseado no fork
 `Godoy301/Batman-Arkham-Asylum-VR`, versão 0.1.4.
 
 Ative **FIRST PERSON** e **aim and HUD follow the headset** no painel VR.
@@ -14,11 +14,31 @@ O ajuste é salvo em `%LOCALAPPDATA%\Batman_Asylum\aa_rendering.ini`, seção
 `AsylumVR`, chave `FirstPersonLookAim`. Comandos: `aa fp aim on`, `aa fp aim off`,
 `aa fp status`. Desativar a opção restaura a orientação base e o HUD na sala.
 
+### Correção HEAD-AIM2
+
+O primeiro teste real mostrou `enabled=1`, `active=0`, `writes=0` e
+`reason=not gameplay`, apesar de a câmera de primeira pessoa acompanhar o
+personagem. O leitor de menu estava em estado desconhecido; a primeira versão
+exigia confirmação de gameplay e nunca chegava à aplicação da mira.
+
+HEAD-AIM2 também permite a aplicação quando o leitor está desconhecido **e**
+a câmera nativa de primeira pessoa e o personagem controlado passam nas
+validações de identidade, posição e proximidade. Um menu identificado, ausência
+de pose, personagem inválido ou painel VR aberto continuam bloqueando a função.
+O estado desconhecido continua registrado como desconhecido; nenhum offset do
+leitor de menu foi alterado sem evidência do jogo.
+
+Após reinstalar, feche o F10, mova a cabeça com o analógico parado e pressione
+F2. Procure `build=Asylum-0.1.4-HEAD-AIM2`, `active=1`, `writes` aumentando e
+`hudFollowing=1`. `reason=active via validated first-person pawn` identifica
+essa alternativa de validação. O comportamento no headset ainda precisa ser
+confirmado; a versão anterior nunca chegou a exercitar a atualização de mira.
+
 ## Compilação e alcance da validação
 
 No Windows, use os comandos de compilação do README. O novo CTest se chama
 `first_person_head_aim`. O workflow **Windows head aim checks** compila o mod
-Win32 e executa quatro testes de CPU; ele não executa o jogo, testes de GPU,
+Win32 e executa cinco testes de CPU; ele não executa o jogo, testes de GPU,
 OpenXR, nem compila o helper DLSS de 64 bits.
 
 ## Instalar as DLLs de teste (incluindo o manifesto)
@@ -97,6 +117,10 @@ segundos, evitando escrita em disco por frame. Elas registram:
 
 - `requested/enabled/active`, `reason`, `gen` e `ageMs`: configuração,
   aplicação efetiva, motivo de suspensão, geração da pose e idade da última escrita;
+- `menuMode`, `menuRead` e `viewportCountCap`: estado observado do leitor de
+  menu, etapa que falhou e contagem/capacidade da lista de viewports. Esses
+  campos também aparecem no CSV para distinguir um menu real de uma leitura
+  indisponível;
 - `bodyPitchYaw`, `targetPitchYaw`, `beforePitchYaw`, `readbackPitchYaw`:
   orientação base, solicitada, observada antes da atualização e relida após ela;
 - `headQuat` e `stickRXRY`: orientação do headset e último analógico entregue
@@ -116,9 +140,12 @@ paradas indicam ausência de novas atualizações, mesmo se a última amostra es
 
 O repositório identifica o menu principal, mas ainda não possui um sinal
 validado para todos os menus de pausa/mapa ou todas as câmeras de cinematics.
-Esta mudança suspende a mira no menu principal/estado desconhecido, quando o
+Esta mudança suspende a mira no menu principal identificado, quando o
 painel VR possui a entrada, sem pose nativa válida, sem pawn/controlador válido
-ou com câmera distante do Batman. Pausa e cinematics próximas precisam do
+ou com câmera distante do Batman. Se o estado do leitor de menu for desconhecido,
+a alternativa depende da validação da câmera de primeira pessoa e do personagem
+controlado, não de uma identificação positiva de gameplay. Pausa, cinematics
+próximas e um menu não reconhecido com personagem próximo precisam do
 teste acima; não há uma nova alegação de detecção desses estados.
 
 Neste ambiente Linux, o build MSVC e a validação no headset não estão disponíveis.

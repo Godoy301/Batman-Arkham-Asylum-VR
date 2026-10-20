@@ -4,6 +4,7 @@
 // "FIRSTPERSON"): eye position follows Batman; optional head aim adds VR look to stick turning.
 #include <cstdint>
 #include <cstddef>
+#include "menu_state.h"
 namespace bvr::vr { struct HeadPose; }
 
 namespace bvr::aa::first_person {
@@ -14,7 +15,7 @@ void install(uintptr_t imageBase, const wchar_t* settingsPath); // aa_rendering.
 void update(void* localPlayer, const char* blocked);
 // Game thread: start once per ordinary draw, then reuse the first constructor's
 // complete view for the other eye. Return whether head aim was actually applied.
-void begin_frame(bool nativeActive, bool gameplay, uint32_t generation);
+void begin_frame(bool nativeActive, const menu_state::Observation& mode, uint32_t generation);
 bool apply(float view[4][4], float unitsPerMetre, const vr::HeadPose& head);
 void status_line(char* out, size_t size);
 void note_hud(uint32_t generation, bool followsHead, bool success);

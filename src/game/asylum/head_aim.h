@@ -1,11 +1,44 @@
 #pragma once
 // Pure math shared by the game-thread aim drive, HUD compositor and CPU tests.
 #include "stereo_math.h"
+#include "menu_state.h"
 #include "core/util/xr_math.h"
 #include <algorithm>
 #include <cstdint>
 
 namespace bvr::aa::head_aim {
+// The IsMenuLevel reader can be unknown during a valid first-person scene.
+// Unknown is NOT a gameplay verdict: the controlled-pawn + close-main-camera
+// checks still have to succeed before this policy permits an engine write.
+enum class Gate { off, optionOff, noNative, panel, menu, needPawn, needCamera, active, activePawnFallback };
+struct Context {
+    bool firstPerson{}, requested{}, native{}, panel{};
+    menu_state::Mode mode{menu_state::Mode::unknown};
+    Gate evaluate(bool controlledPawn, bool closeCamera) const {
+        if(!firstPerson)return Gate::off;
+        if(!requested)return Gate::optionOff;
+        if(!native)return Gate::noNative;
+        if(panel)return Gate::panel;
+        if(mode==menu_state::Mode::menu)return Gate::menu;
+        if(!controlledPawn)return Gate::needPawn;
+        if(!closeCamera)return Gate::needCamera;
+        return mode==menu_state::Mode::gameplay?Gate::active:Gate::activePawnFallback;
+    }
+};
+inline bool permits(Gate g){return g==Gate::active||g==Gate::activePawnFallback;}
+inline const char* reason(Gate g){
+    switch(g){
+    case Gate::off:return "first person off";
+    case Gate::optionOff:return "head aim off";
+    case Gate::noNative:return "native pose unavailable";
+    case Gate::panel:return "VR panel owns input";
+    case Gate::menu:return "main menu";
+    case Gate::needPawn:return "waiting for controlled pawn";
+    case Gate::needCamera:return "camera far from pawn";
+    case Gate::active:return "active";
+    default:return "active via validated first-person pawn";
+    }
+}
 constexpr float pi = 3.14159265358979323846f;
 struct Rotation { int32_t pitch{}, yaw{}, roll{}; }; // UE3 FRotator, 65536 units/turn
 static_assert(sizeof(Rotation)==12);
