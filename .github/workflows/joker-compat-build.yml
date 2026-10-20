@@ -31,6 +31,7 @@ jobs:
           $files = @(
             'tools/Launch-VR.ps1',
             'tools/Apply-JokerCompatBuild.ps1',
+            'tools/Install-Joker-Compatibility.ps1',
             'tools/Install-VR.ps1',
             'install/Install-BatmanAsylumVR.ps1'
           )
@@ -55,6 +56,8 @@ jobs:
           Copy-Item build-native9/Release/aa_xr_config32.exe staging/
           Copy-Item tools/Launch-VR.ps1 staging/
           Copy-Item tools/Apply-JokerCompatBuild.ps1 staging/
+          Copy-Item tools/Install-Joker-Compatibility.ps1 staging/
+          Copy-Item tools/Install-Joker-Compatibility.bat staging/
           Copy-Item install/Install-BatmanAsylumVR.ps1 staging/
           Copy-Item JOKER-DLC-COMPATIBILITY.md staging/README-Joker-Compatibility.md
 
