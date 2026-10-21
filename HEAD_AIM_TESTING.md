@@ -1,199 +1,203 @@
-# Primeira pessoa: mira e HUD pelo headset
+# First person: headset aiming and HUD
 
-Build de desenvolvimento: `Asylum-0.1.4-HEAD-AIM5`, baseado no fork
-`Godoy301/Batman-Arkham-Asylum-VR`, versão 0.1.4.
+Development build: `Asylum-0.1.4-HEAD-AIM5`, based on the
+`Godoy301/Batman-Arkham-Asylum-VR` fork, version 0.1.4.
 
-Ative **FIRST PERSON** e **aim and HUD follow the headset** no painel VR.
-O segundo ajuste fica ativado por padrão quando não existe configuração salva.
-Com head aiming ligado, o analógico direito gira apenas na horizontal;
-a inclinação vertical é controlada pelo headset. A opção separada de bloqueio
-foi removida; a chave antiga `FirstPersonBlockStickPitch` é ignorada.
-O HUD acompanha posição e orientação do headset, incluindo inclinação, em um
-único plano com profundidade para os dois olhos. Marcadores de alvos continuam
-presos aos alvos no mundo.
+Enable **FIRST PERSON** and **aim and HUD follow the headset** in the VR panel.
+The second setting is enabled by default when no saved configuration exists.
+With head aiming enabled, the right stick turns only horizontally;
+vertical pitch is controlled by the headset. The separate blocking option
+was removed; the old `FirstPersonBlockStickPitch` key is ignored.
+The HUD follows the headset position and orientation, including tilt, on a
+single plane with depth for both eyes. Target markers remain attached to their
+targets in the world.
 
-O ajuste é salvo em `%LOCALAPPDATA%\Batman_Asylum\aa_rendering.ini`, seção
-`AsylumVR`, chave `FirstPersonLookAim`. Comandos: `aa fp aim on`, `aa fp aim off`,
-`aa fp status`. Desativar a opção restaura a orientação base e o HUD na sala.
+The setting is saved in `%LOCALAPPDATA%\Batman_Asylum\aa_rendering.ini`, section
+`AsylumVR`, key `FirstPersonLookAim`. Commands: `aa fp aim on`, `aa fp aim off`,
+`aa fp status`. Disabling the option restores the base orientation and the
+room-fixed HUD.
 
-### Validação de gameplay (introduzida na HEAD-AIM2)
+### Gameplay validation (introduced in HEAD-AIM2)
 
-O primeiro teste real mostrou `enabled=1`, `active=0`, `writes=0` e
-`reason=not gameplay`, apesar de a câmera de primeira pessoa acompanhar o
-personagem. O leitor de menu estava em estado desconhecido; a primeira versão
-exigia confirmação de gameplay e nunca chegava à aplicação da mira.
+The first real test showed `enabled=1`, `active=0`, `writes=0`, and
+`reason=not gameplay`, even though the first-person camera followed the
+character. The menu reader was in an unknown state; the first version required
+confirmed gameplay and therefore never applied head aiming.
 
-A versão atual também permite a aplicação quando o leitor está desconhecido **e**
-a câmera nativa de primeira pessoa e o personagem controlado passam nas
-validações de identidade, posição e proximidade. Um menu identificado, ausência
-de pose, personagem inválido ou painel VR aberto continuam bloqueando a função.
-O estado desconhecido continua registrado como desconhecido; nenhum offset do
-leitor de menu foi alterado sem evidência do jogo.
+The current version also allows application when the reader is unknown **and**
+the native first-person camera and controlled pawn pass identity, position, and
+proximity validation. An identified menu, missing pose, invalid pawn, or open VR
+panel still blocks the feature. The unknown state continues to be reported as
+unknown; no menu-reader offset was changed without game evidence.
 
-Após reinstalar, feche o F10, mova a cabeça com o analógico parado e pressione
-F2. Procure `build=Asylum-0.1.4-HEAD-AIM5`, `active=1`, `writes` aumentando e
-`hudFollowing=1`. `reason=active via validated first-person pawn` identifica
-essa alternativa de validação. O usuário confirmou a mira e a estabilidade do pitch na HEAD-AIM3.
-A correção dos flashes de imagem plana na HEAD-AIM4 aguarda teste no headset.
+After reinstalling, close F10, move your head with the stick at rest, and press
+F2. Look for `build=Asylum-0.1.4-HEAD-AIM5`, `active=1`, increasing `writes`,
+and `hudFollowing=1`. `reason=active via validated first-person pawn` identifies
+this validation fallback. The user confirmed aiming and pitch stability in
+HEAD-AIM3. The flat-image flash fix in HEAD-AIM4 still requires headset testing.
 
-## Compilação e alcance da validação
+## Build and validation scope
 
-No Windows, use os comandos de compilação do README. O novo CTest se chama
-`first_person_head_aim`. O workflow **Windows head aim checks** compila o mod
-Win32 e executa seis testes de CPU; ele não executa o jogo, testes de GPU,
-OpenXR, nem compila o helper DLSS de 64 bits.
+On Windows, use the build commands from the README. The new CTest is named
+`first_person_head_aim`. The **Windows head aim checks** workflow builds the
+Win32 mod and runs six CPU tests; it does not run the game, GPU tests, OpenXR,
+or build the 64-bit DLSS helper.
 
-## Instalar as DLLs de teste (incluindo o manifesto)
+## Installing the test DLLs (including the manifest)
 
-O artefato `head-aim-test-dlls` contém somente as DLLs de teste. Use também o
-ZIP completo da versão **0.1.4** nas
-[releases originais](https://github.com/junglejuz/Batman-Arkham-Asylum-VR/releases).
-Mantenha esse ZIP original para poder voltar à versão anterior.
+The `head-aim-test-dlls` artifact contains only the test DLLs. Also use the
+complete **0.1.4** ZIP from the
+[original releases](https://github.com/junglejuz/Batman-Arkham-Asylum-VR/releases).
+Keep that original ZIP so you can return to the previous version.
 
-1. Feche o jogo. Extraia o ZIP completo 0.1.4 para uma pasta de trabalho fora
-   da pasta do jogo, por exemplo `Downloads\AsylumVR-HeadAim`.
-2. Extraia o artefato de teste separadamente. Localize `batman_asylum.dll`,
-   `d3d9.dll` e `xinput1_3.dll` (o artefato pode colocá-las em
-   `build-native9\Release`). Copie **essas três DLLs** para a pasta de trabalho,
-   ao lado de `Install-BatmanAsylumVR.bat`, substituindo as versões do pacote
-   original. Preserve os demais arquivos e a pasta `files` do ZIP completo.
-3. Execute `Install-BatmanAsylumVR.bat` **dessa pasta de trabalho modificada**.
-   Ele instala as DLLs de teste e recria `Binaries\asylumvr_manifest.json` com
-   os hashes dos arquivos instalados. As configurações VR existentes são mantidas.
-4. Inicie pelo atalho VR normal e siga o teste abaixo.
+1. Close the game. Extract the complete 0.1.4 ZIP to a working folder outside
+   the game folder, for example `Downloads\AsylumVR-HeadAim`.
+2. Extract the test artifact separately. Locate `batman_asylum.dll`,
+   `d3d9.dll`, and `xinput1_3.dll` (the artifact may place them in
+   `build-native9\Release`). Copy **those three DLLs** to the working folder,
+   next to `Install-BatmanAsylumVR.bat`, replacing the versions from the
+   original package. Preserve all other files and the `files` folder from the
+   complete ZIP.
+3. Run `Install-BatmanAsylumVR.bat` **from that modified working folder**.
+   It installs the test DLLs and recreates `Binaries\asylumvr_manifest.json`
+   with hashes for the installed files. Existing VR settings are preserved.
+4. Launch through the normal VR shortcut and follow the test below.
 
-Trocar DLLs diretamente em `Binaries` deixa os hashes do manifesto antigo.
-Isso causa `A mod file in the game folder is missing or changed (d3d9.dll)`
-antes mesmo de o jogo abrir. Se você já fez essa troca, o procedimento acima
-também corrige essa instalação. Não é necessário desinstalar primeiro.
-Não apague o manifesto nem remova a verificação no launcher.
+Replacing DLLs directly in `Binaries` leaves the old manifest hashes in place.
+This causes `A mod file in the game folder is missing or changed (d3d9.dll)`
+before the game even starts. If you already replaced them this way, the
+procedure above also repairs the installation. You do not need to uninstall
+first. Do not delete the manifest or remove launcher verification.
 
-Para voltar à versão original, extraia novamente o ZIP completo **sem as DLLs
-de teste** para outra pasta e execute seu instalador. Ele restaura os arquivos
-originais e recria o manifesto correspondente. Executar o instalador de um
-pacote original não modificado também remove a funcionalidade de teste.
+To return to the original version, extract the complete ZIP again **without the
+test DLLs** to another folder and run its installer. It restores the original
+files and recreates the matching manifest. Running the installer from an
+unmodified original package also removes the test functionality.
 
-Os testes portáveis verificam a direção de mira contra raios independentes,
-giro do controle somado ao headset, ausência de acumulação da rotação do
-headset, recentralização, restauração, poses inválidas e projeção binocular
-do HUD sob movimento. Eles não provam o comportamento dos gadgets no jogo.
+The portable tests verify aim direction against independent rays, controller
+turning added to headset rotation, no accumulation of headset rotation,
+recentering, restoration, invalid poses, and binocular HUD projection under
+movement. They do not prove in-game gadget behavior.
 
-## Uma sessão de teste no PC VR
+## One PC VR test session
 
-1. Inicie pelo atalho VR. No menu principal, confirme o comportamento normal.
-2. Entre no jogo e ative primeira pessoa. Sem tocar no analógico direito,
-   olhe para esquerda/direita, cima/baixo e incline a cabeça. O HUD deve
-   permanecer à frente, com a mesma profundidade nos dois olhos.
-3. Mire com um gadget em dois alvos separados. Mova apenas a cabeça, depois
-   use o analógico com a cabeça parada e, por fim, mova os dois juntos.
-   Compare a mira visível com a direção/impacto real do gadget. Teste também
-   a seleção de pontos do gancho: seu marcador deve continuar no alvo.
-4. Olhe para um lado por alguns segundos sem mover o controle: não deve
-   haver giro contínuo nem aplicação duplicada da rotação. Gire através da
-   direção oposta, recentralize e repita com o outro lado.
-5. Ligue/desligue a opção, abra/feche o painel VR, teste pausa/mapa, uma
-   transição de câmera e retorno ao menu principal. Teste perda/retorno do
-   rastreamento. Verifique controles, retorno da mira e ausência de saltos
-   inesperados. Repita com DLSS e, se utilizado, AFW.
-6. Diante de qualquer problema, pressione **F2**, saia normalmente e preserve
-   os arquivos abaixo antes de iniciar várias novas sessões.
+1. Launch through the VR shortcut. At the main menu, confirm normal behavior.
+2. Enter the game and enable first person. Without touching the right stick,
+   look left/right, up/down, and tilt your head. The HUD should remain in front
+   of you with the same depth in both eyes.
+3. Aim a gadget at two separate targets. Move only your head, then use the
+   stick with your head still, and finally move both together. Compare the
+   visible aim with the gadget's actual direction/impact. Also test grapple
+   point selection: its marker should remain on the target.
+4. Look to one side for a few seconds without moving the controller: there
+   should be no continuous turning or duplicate application of rotation. Turn
+   through the opposite direction, recenter, and repeat on the other side.
+5. Toggle the option, open/close the VR panel, test pause/map, a camera
+   transition, and return to the main menu. Test tracking loss/recovery.
+   Verify controls, aim restoration, and absence of unexpected jumps. Repeat
+   with DLSS and, if used, AFW.
+6. If any problem occurs, press **F2**, exit normally, and preserve the files
+   below before starting several new sessions.
 
-## Evidências necessárias
+## Required evidence
 
-Em `%LOCALAPPDATA%\Batman_Asylum`:
+In `%LOCALAPPDATA%\Batman_Asylum`:
 
-- `batman_asylum.log`: sessão atual; `batman_asylum.prev.log`: sessão anterior.
-  O logger já preserva uma geração anterior e descarrega cada mensagem em disco.
-- `captures\A2p_*\status.txt`: inclui o identificador do build e `headAim=`.
-  A mesma pasta contém as imagens disponíveis de cena, HUD e olhos.
-- `captures\A2p_*\head_aim.csv`: até 256 amostras recentes, no máximo 20 por
-  segundo durante atividade, mais mudanças de estado. Inclui tempo monotônico
-  em milissegundos, geração, orientação solicitada/observada, quaternion e
-  analógico. O histórico fica em memória e só é escrito ao capturar, permitindo
-  examinar movimentos entre as mensagens de cinco segundos do log.
-- `captures\A2p_history_*`: histórico estéreo solicitado por F2, quando existem
-  pares completos disponíveis. Os nomes A2p são herdados do capturador original.
+- `batman_asylum.log`: current session; `batman_asylum.prev.log`: previous
+  session. The logger already preserves one previous generation and flushes
+  every message to disk.
+- `captures\A2p_*\status.txt`: includes the build identifier and `headAim=`.
+  The same folder contains the available scene, HUD, and eye images.
+- `captures\A2p_*\head_aim.csv`: up to 256 recent samples, at most 20 per
+  second during activity, plus state changes. It includes monotonic time in
+  milliseconds, generation, requested/observed orientation, quaternion, and
+  stick input. History remains in memory and is written only on capture, making
+  it possible to inspect movement between the five-second log messages.
+- `captures\A2p_history_*`: stereo history requested by F2 when complete
+  pairs are available. The A2p names are inherited from the original capture
+  system.
 
-As linhas `[aa head aim]` são emitidas nas mudanças de estado e a cada cinco
-segundos, evitando escrita em disco por frame. Elas registram:
+The `[aa head aim]` lines are emitted on state changes and every five seconds,
+avoiding per-frame disk writes. They record:
 
-- `requested/enabled/active`, `reason`, `gen` e `ageMs`: configuração,
-  aplicação efetiva, motivo de suspensão, geração da pose e idade da última escrita;
-- `menuMode`, `menuRead` e `viewportCountCap`: estado observado do leitor de
-  menu, etapa que falhou e contagem/capacidade da lista de viewports. Esses
-  campos também aparecem no CSV para distinguir um menu real de uma leitura
-  indisponível;
+- `requested/enabled/active`, `reason`, `gen`, and `ageMs`: configuration,
+  effective application, suspension reason, pose generation, and age of the
+  latest write;
+- `menuMode`, `menuRead`, and `viewportCountCap`: observed menu-reader
+  state, failed stage, and viewport list count/capacity. These fields also
+  appear in the CSV to distinguish a real menu from an unavailable read;
 - `bodyPitchYaw`, `targetPitchYaw`, `beforePitchYaw`, `readbackPitchYaw`:
-  orientação base, solicitada, observada antes da atualização e relida após ela;
-- `headQuat` e `stickRXRY`: orientação do headset e último analógico entregue
-  pelo compositor de entrada, amostrados na atualização;
+  base orientation, requested orientation, orientation observed before the
+  update, and orientation read back afterward;
+- `headQuat` and `stickRXRY`: headset orientation and latest stick values
+  delivered by the input compositor, sampled during the update;
 - `writes/failures/restores`, `hudGen/hudFollowing/hudComposites/hudFailures`:
-  escritas confirmadas, falhas, restaurações e composição do HUD;
-- `fpFrames/headFrames/headMisses`: aplicação da câmera e leitura do osso da cabeça.
+  confirmed writes, failures, restorations, and HUD composition;
+- `fpFrames/headFrames/headMisses`: camera application and head-bone reads.
 
-Uma releitura correta prova somente que `Controller.Rotation` recebeu o valor;
-ela não prova que todos os gadgets o consumiram. A atualização ocorre na
-construção da câmera, depois da simulação daquele frame: a reação do gadget
-pode ocorrer no próximo tick. Compare imagens/impactos e os logs existentes
-`[aa grapple]` para confirmar o resultado real. `ageMs` crescente ou gerações
-paradas indicam ausência de novas atualizações, mesmo se a última amostra estava ativa.
+A correct readback proves only that `Controller.Rotation` received the value;
+it does not prove that every gadget consumed it. The update happens during
+camera construction, after that frame's simulation: gadget reaction may occur
+on the next tick. Compare images/impacts and the existing `[aa grapple]` logs
+to confirm the actual result. Increasing `ageMs` or stalled generations
+indicate that no new updates are being applied even if the last sample was
+active.
 
-## Limitações conhecidas
+## Known limitations
 
-O repositório identifica o menu principal, mas ainda não possui um sinal
-validado para todos os menus de pausa/mapa ou todas as câmeras de cinematics.
-Esta mudança suspende a mira no menu principal identificado, quando o
-painel VR possui a entrada, sem pose nativa válida, sem pawn/controlador válido
-ou com câmera distante do Batman. Se o estado do leitor de menu for desconhecido,
-a alternativa depende da validação da câmera de primeira pessoa e do personagem
-controlado, não de uma identificação positiva de gameplay. Pausa, cinematics
-próximas e um menu não reconhecido com personagem próximo precisam do
-teste acima; não há uma nova alegação de detecção desses estados.
+The repository identifies the main menu, but still does not have a validated
+signal for every pause/map menu or every cinematic camera. This change
+suspends aiming in the identified main menu, when the VR panel owns input,
+without a valid native pose, without a valid pawn/controller, or when the
+camera is far from Batman. If the menu-reader state is unknown, the fallback
+depends on validation of the first-person camera and controlled pawn, not on
+positive gameplay identification. Pause, nearby cinematics, and an unrecognized
+menu with the pawn nearby require the test above; there is no new claim that
+those states are detected.
 
-Neste ambiente Linux, o build MSVC e a validação no headset não estão disponíveis.
-O resultado do workflow Windows e a sessão real precisam ser consultados
-separadamente; passar nos testes de CPU não significa aprovação no headset.
+In this Linux environment, the MSVC build and headset validation are not
+available. The Windows workflow result and the real headset session must be
+checked separately; passing CPU tests does not mean headset approval.
 
+## HEAD-AIM4: automatic blocking and third-person flashes
 
-## HEAD-AIM4: bloqueio automático e flashes em terceira pessoa
+Head aiming now automatically blocks the vertical right-stick axis. Disabling
+head aiming restores normal vertical control. Horizontal turning remains.
+Test it on/off, close F10, and verify movement, aiming, and gadgets.
 
-O head aiming agora bloqueia automaticamente o eixo vertical do analógico.
-Desligá-lo devolve o controle vertical normal. O giro horizontal permanece.
-Teste ligado/desligado, feche F10 e confira movimento, mira e gadgets.
+Head and both eye poses are now published together. Previously, the game could
+read a new head generation while the eyes were still being located, causing
+one flat frame. The new camera uses a complete sample from a single generation.
+Real tracking loss still invalidates the sample; a valid pose is not forced
+when the runtime reports failure.
 
-A publicação das poses da cabeça e dos dois olhos agora é conjunta. Antes,
-o jogo podia ler a nova geração da cabeça enquanto os olhos ainda estavam
-sendo localizados, causando um quadro plano. A nova câmera usa uma amostra
-completa de uma única geração. Perda real de rastreamento continua invalidando
-a amostra; não se força uma pose válida quando o runtime informa falha.
+Walk through the same smoke repeatedly while moving your head, then repeat
+outside it. Press F2 immediately after any remaining flash. Send the log and
+files from the NEW capture folder; the version should be HEAD-AIM4. The log
+adds `coherentPoseUnavailable`, `flatDraws`, and `[aa native fallback]`
+lines with pose, camera, and viewport state. The specific relationship between
+smoke and failure has not been proven; the tests reproduce the incomplete
+publication window.
 
-Atravesse a mesma fumaça repetidamente, movendo a cabeça, e repita fora dela.
-Pressione F2 logo após qualquer flash restante. Envie o log e os arquivos da
-NOVA pasta de captura; a versão deve ser HEAD-AIM4. O log acrescenta
-`coherentPoseUnavailable`, `flatDraws` e linhas `[aa native fallback]` com o
-estado de pose, câmera e viewport. A relação específica entre fumaça e falha
-não foi comprovada; os testes reproduzem a janela de publicação incompleta.
-
-O CSV conserva `raw_ry`, `move_lx`, `move_ly`, `pitch_input` e
-`block_stick_pitch` (agora a política automática do head aiming).
-`stick_ry` é a entrada entregue ao jogo.
-
+The CSV keeps `raw_ry`, `move_lx`, `move_ly`, `pitch_input`, and
+`block_stick_pitch` (now the automatic head-aiming policy).
+`stick_ry` is the input delivered to the game.
 
 ## HEAD-AIM5: World scale
 
-No início do F10, o slider **World scale** vai de **0.50x a 2.00x**.
-**1.00x** mantém o tamanho original; valores maiores fazem o mundo parecer
-maior, menores fazem parecer menor. **Reset** volta a 1.00x. O valor é salvo
-em `AsylumVR/WorldScale` no `aa_rendering.ini` e aparece em `status.txt` e nas
-linhas `[aa world scale]` do log.
+At the top of F10, the **World scale** slider ranges from **0.50x to 2.00x**.
+**1.00x** preserves the original size; larger values make the world appear
+larger, and smaller values make it appear smaller. **Reset** returns to 1.00x.
+The value is saved as `AsylumVR/WorldScale` in `aa_rendering.ini` and appears
+in `status.txt` and the log's `[aa world scale]` lines.
 
-Aplica-se em primeira e terceira pessoa, no estéreo nativo e AFW. A escala
-é compartilhada pelos dois olhos e pelo movimento físico da cabeça, com os
-marcadores usando a mesma conversão. HUD e menu mantêm seu tamanho físico;
-a câmera continua presa ao mesmo ponto do personagem. Não altera o FOV.
+It applies in first and third person, native stereo, and AFW. The scale is
+shared by both eyes and physical head movement, with markers using the same
+conversion. HUD and menu retain their physical size; the camera remains
+attached to the same character point. It does not change FOV.
 
-Teste 0.75x, 1.00x e 1.25x numa sala conhecida, inclinando/deslocando a cabeça,
-mirando com gadget e olhando os marcadores de gancho/detetive. Confira Reset,
-reinicie o jogo para verificar persistência e repita com AFW se utilizado.
-O usuário confirmou a correção dos flashes na HEAD-AIM4; verifique também a
-mesma fumaça para cobrir regressões. A escala ainda requer validação no headset.
+Test 0.75x, 1.00x, and 1.25x in a familiar room while tilting/translating your
+head, aiming a gadget, and looking at grapple/detective markers. Check Reset,
+restart the game to verify persistence, and repeat with AFW if used. The user
+confirmed the HEAD-AIM4 flash fix; also check the same smoke for regressions.
+World scale still requires headset validation.
