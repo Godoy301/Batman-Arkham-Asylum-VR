@@ -39,6 +39,9 @@ inline const char* reason(Gate g){
     default:return "active via validated first-person pawn";
     }
 }
+inline int16_t filter_pitch(int16_t input, bool block, bool active) {
+    return block && active ? 0 : input;
+}
 constexpr float pi = 3.14159265358979323846f;
 struct Rotation { int32_t pitch{}, yaw{}, roll{}; }; // UE3 FRotator, 65536 units/turn
 static_assert(sizeof(Rotation)==12);
@@ -64,17 +67,22 @@ inline math::M body_view(Rotation r) {
     return v;
 }
 struct Solution { Rotation body{}, target{}; math::M view{}; };
-// Remove only our previous contribution; new stick/engine deltas remain in body.
+// Pitch auto-centering must not feed the injected HMD pitch back into the body.
+// Accept pitch deltas only during deliberate stick input; yaw stays additive.
+// No game-specific tick rates or camera offsets are guessed.
 // Commit ONLY after the engine write succeeds. The second eye reuses the first
 // eye's complete view and must never advance this state a second time.
 struct Tracker {
-    Rotation offset{};
-    Rotation remove(Rotation r) const {
-        r.pitch=wrap(int64_t(r.pitch)-offset.pitch); r.yaw=wrap(int64_t(r.yaw)-offset.yaw); return r;
+    Rotation offset{}, lastBody{};
+    bool committed{};
+    Rotation remove(Rotation r, bool acceptPitchDelta=true) const {
+        r.pitch=wrap(int64_t(r.pitch)-offset.pitch); r.yaw=wrap(int64_t(r.yaw)-offset.yaw);
+        if(committed && !acceptPitchDelta) r.pitch=lastBody.pitch;
+        return r;
     }
-    bool solve(Rotation current, const vr::HeadPose& head, Solution& s) const {
+    bool solve(Rotation current, const vr::HeadPose& head, Solution& s, bool acceptPitchDelta=true) const {
         if (!valid_pose(head)) return false;
-        s.body=remove(current); s.view=body_view(s.body);
+        s.body=remove(current,acceptPitchDelta); s.view=body_view(s.body);
         auto orientation=head; orientation.px=orientation.py=orientation.pz=0;
         const auto aim=math::mul(s.view,math::pose_view(orientation));
         const float x=aim.v[0][2], y=aim.v[1][2], z=aim.v[2][2];
@@ -84,6 +92,7 @@ struct Tracker {
         return true;
     }
     void commit(const Solution& s) {
+        lastBody=s.body; committed=true;
         offset.pitch=wrap(int64_t(s.target.pitch)-s.body.pitch);
         offset.yaw=wrap(int64_t(s.target.yaw)-s.body.yaw);
     }

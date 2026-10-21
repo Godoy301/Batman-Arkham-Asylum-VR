@@ -1,6 +1,6 @@
 # Primeira pessoa: mira e HUD pelo headset
 
-Build de desenvolvimento: `Asylum-0.1.4-HEAD-AIM2`, baseado no fork
+Build de desenvolvimento: `Asylum-0.1.4-HEAD-AIM3`, baseado no fork
 `Godoy301/Batman-Arkham-Asylum-VR`, versão 0.1.4.
 
 Ative **FIRST PERSON** e **aim and HUD follow the headset** no painel VR.
@@ -14,14 +14,14 @@ O ajuste é salvo em `%LOCALAPPDATA%\Batman_Asylum\aa_rendering.ini`, seção
 `AsylumVR`, chave `FirstPersonLookAim`. Comandos: `aa fp aim on`, `aa fp aim off`,
 `aa fp status`. Desativar a opção restaura a orientação base e o HUD na sala.
 
-### Correção HEAD-AIM2
+### Correção HEAD-AIM3
 
 O primeiro teste real mostrou `enabled=1`, `active=0`, `writes=0` e
 `reason=not gameplay`, apesar de a câmera de primeira pessoa acompanhar o
 personagem. O leitor de menu estava em estado desconhecido; a primeira versão
 exigia confirmação de gameplay e nunca chegava à aplicação da mira.
 
-HEAD-AIM2 também permite a aplicação quando o leitor está desconhecido **e**
+HEAD-AIM3 também permite a aplicação quando o leitor está desconhecido **e**
 a câmera nativa de primeira pessoa e o personagem controlado passam nas
 validações de identidade, posição e proximidade. Um menu identificado, ausência
 de pose, personagem inválido ou painel VR aberto continuam bloqueando a função.
@@ -29,7 +29,7 @@ O estado desconhecido continua registrado como desconhecido; nenhum offset do
 leitor de menu foi alterado sem evidência do jogo.
 
 Após reinstalar, feche o F10, mova a cabeça com o analógico parado e pressione
-F2. Procure `build=Asylum-0.1.4-HEAD-AIM2`, `active=1`, `writes` aumentando e
+F2. Procure `build=Asylum-0.1.4-HEAD-AIM3`, `active=1`, `writes` aumentando e
 `hudFollowing=1`. `reason=active via validated first-person pawn` identifica
 essa alternativa de validação. O comportamento no headset ainda precisa ser
 confirmado; a versão anterior nunca chegou a exercitar a atualização de mira.
@@ -151,3 +151,27 @@ teste acima; não há uma nova alegação de detecção desses estados.
 Neste ambiente Linux, o build MSVC e a validação no headset não estão disponíveis.
 O resultado do workflow Windows e a sessão real precisam ser consultados
 separadamente; passar nos testes de CPU não significa aprovação no headset.
+
+
+## HEAD-AIM3: pitch durante caminhada e bloqueio do analógico
+
+No F10, em primeira pessoa, `block right-stick up / down` bloqueia o eixo
+vertical do analógico, preservando o horizontal. Desligada por padrão, salva
+em `FirstPersonBlockStickPitch`. Feche o painel para testar. O bloqueio só é
+publicado enquanto a câmera em primeira pessoa é válida; polling do painel,
+menus identificados e terceira pessoa mantêm a entrada original.
+
+A base de pitch deixa de incorporar ajustes automáticos do jogo quando não há
+entrada vertical deliberada do analógico. Isso evita realimentar a inclinação
+injetada do headset quando o jogo recentraliza a câmera durante a caminhada.
+Com a opção desligada e entrada acima da deadzone XInput, o pitch do analógico
+continua somado ao olhar. Mouse vertical não é contemplado por essa política.
+
+Teste olhar para cima/baixo parado e andando (frente, trás e lados); depois
+repita com o bloqueio ligado/desligado, verificando giro horizontal e gadgets.
+Faça uma NOVA captura F2 durante a caminhada se houver inversão. O log tem a
+versão HEAD-AIM3; o CSV acrescenta `raw_ry`, `move_lx`, `move_ly`,
+`pitch_input`, `block_stick_pitch`. `stick_ry` é a entrada entregue ao jogo.
+Os testes simulam recentralização; o resultado real no headset precisa ser
+confirmado. Ajustes de câmera do jogo enquanto o analógico vertical está ativo
+continuam indistinguíveis da entrada do jogador no delta do controlador.

@@ -91,6 +91,23 @@ int main(){
     auto shifted=pose(15,40,10);CHECK(t.solve(current,shifted,s));const auto target=s.target;
     shifted.px=2;shifted.py=1;shifted.pz=-3;CHECK(t.solve(current,shifted,s));CHECK(!std::memcmp(&target,&s.target,sizeof(target)));
 
+    for(int16_t value:{int16_t(-32768),int16_t(0),int16_t(32767)}) {
+        CHECK(h::filter_pitch(value,false,true)==value);
+        CHECK(h::filter_pitch(value,true,false)==value);
+        CHECK(h::filter_pitch(value,true,true)==0);
+    }
+    for(float pitch:{-45.f,45.f}) {
+        h::Tracker walking; h::Solution w;
+        CHECK(walking.solve({0,0,0},pose(pitch,0,0),w,false)); walking.commit(w);
+        for(int frame=0;frame<300;++frame) {
+            auto recentered=w.target; recentered.pitch=0;
+            CHECK(walking.solve(recentered,pose(pitch,0,0),w,false));
+            CHECK(w.body.pitch==0); CHECK(aim_matches(w,pose(pitch,0,0)));
+            walking.commit(w);
+        }
+        auto stick=w.target; stick.pitch=h::wrap(stick.pitch+100);
+        CHECK(walking.solve(stick,pose(pitch,0,0),w,true)); CHECK(w.body.pitch==100);
+    }
     // HUD stays centred under arbitrary rigid head motion but keeps real stereo
     // disparity. Opposite quaternion signs describe the same orientation.
     float baseline[2][4][2]{};

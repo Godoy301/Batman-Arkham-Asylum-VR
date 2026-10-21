@@ -2465,3 +2465,24 @@ The portable production gate regression covers this captured failure and the
 remaining denials. Retail gadget consumption and unrecognized menus/cinematics
 remain unverified; HEAD-AIM2 is the first build able to reach the drive on this
 reported setup.
+
+
+## HEAD-AIM3 (walking pitch feedback)
+
+User confirms HEAD-AIM2 head aim works, reports reversed pitch only while
+walking. New log confirms active writes/readbacks with zero failures; attached
+status/CSV are from old HEAD-AIM (writes=0), so no per-frame moving trace is
+available. Body pitch varies even with sampled RX/RY=0. Auto-centering of the
+injected Controller pitch is a plausible feedback source, not a proven native
+call-site identification. Preserve committed body pitch without deliberate
+vertical stick input; continue accepting yaw deltas. Regression simulates the
+engine zeroing pitch for 300 frames with head +45/-45, then an additive stick
+change. No new offsets/hooks into the game executable.
+
+Final XInput axis callback covers real/composed pad, excludes nested calls and
+overlay polling. Asylum installs it to observe actual delivered axes and apply
+optional vertical-only block (persistent, off by default); valid first-person
+publication expires after 250ms. Trace includes movement, raw/delivered pitch,
+and blocking/input decisions. Mouse pitch unsupported by stabilized policy;
+engine pitch adjustments during deliberate stick pitch remain inseparable.
+Retail walking/stereo/gadget behavior awaits user test, separate from CPU tests.
