@@ -156,7 +156,8 @@ bool drive_aim(math::M& view, const vr::HeadPose& head) {
     if(aimController && (pc!=aimController || pairPawn!=aimPawn)) release_aim();
     head_aim::Rotation current{};
     head_aim::Solution s{};
-    if(!controller_rotation(pairPawn,pc,current) || !aimTracker.solve(current,head,s,pitch_input())) {
+    const bool acceptPitch=pitch_input();
+    if(!controller_rotation(pairPawn,pc,current) || !aimTracker.solve(current,head,s,acceptPitch)) {
         release_aim(); aim_state("invalid controller or headset pose"); return false;
     }
     if(!write_rotation(pc,s.target)) {
@@ -186,7 +187,7 @@ bool drive_aim(math::M& view, const vr::HeadPose& head) {
     aimReport.head[0]=head.qx; aimReport.head[1]=head.qy; aimReport.head[2]=head.qz; aimReport.head[3]=head.qw;
     aimReport.stickX=stickX; aimReport.stickY=stickY;
     aimReport.rawY=rawPitch.load(); aimReport.moveX=moveX.load(); aimReport.moveY=moveY.load();
-    aimReport.pitchInput=pitch_input(); aimReport.pitchBlocked=blockStickPitch.load();
+    aimReport.pitchInput=acceptPitch; aimReport.pitchBlocked=blockStickPitch.load();
     trace_sample(changed);
     ReleaseSRWLockExclusive(&aimReportLock);
     if(changed)BVR_LOG("[aa head aim] %s; generation=%u",why,pairGeneration);
@@ -325,8 +326,9 @@ void begin_frame(bool nativeActive, const menu_state::Observation& mode, uint32_
     const auto verdict=pairContext.evaluate(false,false);
     pairAimCandidate=verdict==head_aim::Gate::needPawn;
     pairViewValid=pairFollowsHead=false; eyeValid=false; pairPawn=0;
-    if(!pairAimCandidate) {
+    if(!pairContext.firstPerson || !nativeActive || pairContext.panel || mode.mode==menu_state::Mode::menu)
         pitchGateMs=0;
+    if(!pairAimCandidate) {
         release_aim();
         aim_state(head_aim::reason(verdict));
     }
