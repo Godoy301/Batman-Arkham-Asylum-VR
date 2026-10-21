@@ -1,6 +1,6 @@
 # Primeira pessoa: mira e HUD pelo headset
 
-Build de desenvolvimento: `Asylum-0.1.4-HEAD-AIM4`, baseado no fork
+Build de desenvolvimento: `Asylum-0.1.4-HEAD-AIM5`, baseado no fork
 `Godoy301/Batman-Arkham-Asylum-VR`, versão 0.1.4.
 
 Ative **FIRST PERSON** e **aim and HUD follow the headset** no painel VR.
@@ -31,7 +31,7 @@ O estado desconhecido continua registrado como desconhecido; nenhum offset do
 leitor de menu foi alterado sem evidência do jogo.
 
 Após reinstalar, feche o F10, mova a cabeça com o analógico parado e pressione
-F2. Procure `build=Asylum-0.1.4-HEAD-AIM4`, `active=1`, `writes` aumentando e
+F2. Procure `build=Asylum-0.1.4-HEAD-AIM5`, `active=1`, `writes` aumentando e
 `hudFollowing=1`. `reason=active via validated first-person pawn` identifica
 essa alternativa de validação. O usuário confirmou a mira e a estabilidade do pitch na HEAD-AIM3.
 A correção dos flashes de imagem plana na HEAD-AIM4 aguarda teste no headset.
@@ -177,3 +177,23 @@ não foi comprovada; os testes reproduzem a janela de publicação incompleta.
 O CSV conserva `raw_ry`, `move_lx`, `move_ly`, `pitch_input` e
 `block_stick_pitch` (agora a política automática do head aiming).
 `stick_ry` é a entrada entregue ao jogo.
+
+
+## HEAD-AIM5: World scale
+
+No início do F10, o slider **World scale** vai de **0.50x a 2.00x**.
+**1.00x** mantém o tamanho original; valores maiores fazem o mundo parecer
+maior, menores fazem parecer menor. **Reset** volta a 1.00x. O valor é salvo
+em `AsylumVR/WorldScale` no `aa_rendering.ini` e aparece em `status.txt` e nas
+linhas `[aa world scale]` do log.
+
+Aplica-se em primeira e terceira pessoa, no estéreo nativo e AFW. A escala
+é compartilhada pelos dois olhos e pelo movimento físico da cabeça, com os
+marcadores usando a mesma conversão. HUD e menu mantêm seu tamanho físico;
+a câmera continua presa ao mesmo ponto do personagem. Não altera o FOV.
+
+Teste 0.75x, 1.00x e 1.25x numa sala conhecida, inclinando/deslocando a cabeça,
+mirando com gadget e olhando os marcadores de gancho/detetive. Confira Reset,
+reinicie o jogo para verificar persistência e repita com AFW se utilizado.
+O usuário confirmou a correção dos flashes na HEAD-AIM4; verifique também a
+mesma fumaça para cobrir regressões. A escala ainda requer validação no headset.

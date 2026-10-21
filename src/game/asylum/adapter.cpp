@@ -73,7 +73,7 @@ void capture(IDXGISwapChain* sc) {
         fprintf(f,"Asylum A2p; nativeSelected=%u presentEye=%d completedPairs=%u; centredScene=%u; AFW=%u\nrendering=%s\nsource=%ux%u format=%u sourceSaved=%u\npreview=%s\ndlss=%s\ncompareStep=%d; transferComparison=%u; trackingComparison=%u; sceneTracking=%u; completedPairFps=%.2f\n",native::selected(),native::present_eye(),native::completed_pairs(),native::centred(),native::afw_present(),native::rendering_status(),d.Width,d.Height,d.Format,saved,vr::flat_preview()==2?"full":vr::flat_preview()==1?"fit":"window",dlssStatus,compareStep,compareTransfer,compareTracking,hud9::fast_tracking(),actualPairFps);
         char particleStatus[320]{};billboard9::status_line(particleStatus,sizeof(particleStatus));fprintf(f,"particles=%s\n",particleStatus);
         char transitionStatus[320]{};transitions9::status_line(transitionStatus,sizeof(transitionStatus));fprintf(f,"transitions=%s\n",transitionStatus);char markerStatus[640]{};markers9::status_line(markerStatus,sizeof(markerStatus));fprintf(f,"markers=%s\n",markerStatus);
-        char aimStatus[1024]{};first_person::status_line(aimStatus,sizeof(aimStatus));fprintf(f,"build=%s\nheadAim=%s\n",BVR_BUILD_ID,aimStatus);
+        char aimStatus[1024]{};first_person::status_line(aimStatus,sizeof(aimStatus));fprintf(f,"build=%s\nworldScale=%.3f\nheadAim=%s\n",BVR_BUILD_ID,native::world_scale(),aimStatus);
         fclose(f);
     }
     vr::save_eye_pictures(dir);
@@ -159,6 +159,7 @@ void draw_ui() {
     ImGui::TextWrapped("F10 or hold both sticks to open/close. Settings save automatically.");
     stereo_history::draw_ui();
     if(ImGui::Button("Recentre view and screens")){vr::recenter_panel();native::recenter();bridge::recenter_hud();}
+    native::draw_world_scale_ui();
     first_person::draw_ui(); // FIRSTPERSON: near the top, it changes the whole view (City)
     if(ImGui::CollapsingHeader("VR RESOLUTION",ImGuiTreeNodeFlags_DefaultOpen))window::draw_ui();
     if(ImGui::CollapsingHeader("STEREO RENDERING",ImGuiTreeNodeFlags_DefaultOpen)){

@@ -5,7 +5,7 @@
 #include "transitions9.h"
 namespace bvr::aa::markers9 {
 bool install_engine(uintptr_t base);
-void publish(uint32_t slot,uint32_t frame,uint32_t generation,void* view,const math::M& baseView,const math::M& baseProjection,const math::M eyeVP[2],float referenceYaw=0,const float* referencePosition=nullptr,const math::M* eyeView=nullptr,bool headHud=false);
+void publish(uint32_t slot,uint32_t frame,uint32_t generation,void* view,const math::M& baseView,const math::M& baseProjection,const math::M eyeVP[2],float referenceYaw=0,const float* referencePosition=nullptr,const math::M* eyeView=nullptr,bool headHud=false,float unitsPerMetre=90.f);
 void end_game_pass();
 void begin_render(uint32_t slot,bool active);
 void begin_eye(int eye,uint32_t generation);

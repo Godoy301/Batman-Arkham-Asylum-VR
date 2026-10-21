@@ -2517,3 +2517,19 @@ but before eyes; reader gets complete previous generation, then new generation.
 Tests invalid tracking, teardown/recovery and 100000 concurrent publications.
 Native log adds coherentPoseUnavailable/flatDraws plus bounded fallback reasons.
 Windows/CPU validation is separate from smoke/headset confirmation.
+
+
+## HEAD-AIM5 (world scale)
+
+User accepts HEAD-AIM4 flash fix. Add World scale (0.5..2, default 1) and reset
+at top of F10, saved as AsylumVR/WorldScale. Larger means larger apparent world:
+units/metre = 90 / scale. Snapshot once per draw pair for all eye transforms,
+AFW, marker eye matrices and particle centre deltas. Marker HUD intersections
+convert world points with per-pass units; edge pointers retain physical depth.
+Keep avatar bone attachment/forward offset and pawn-camera distance safety gate
+in original game units, independent of visual world size. HUD stays XR metres.
+Reset DLSS/AFW history when the first rendered camera of the new scale arrives,
+not while queued older cameras are still being consumed. Camera carries units.
+CPU scene projection test checks physical binocular disparity and translation
+at four scales, unchanged FOV/rotation, default and invalid value bounds.
+Actual scale/markers/AFW perception needs headset confirmation.

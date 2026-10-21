@@ -19,7 +19,7 @@ namespace {
 // direction the game points its edge ring, from the head-free view-space x/y.
 struct Anchor{float world[3]{},ref[4]{};bool off{},gameRef{};float dir[2]{};};
 struct Set{uint32_t frame{};bool valid{};unsigned n{};std::array<Anchor,64> points;};
-struct Pass{uint32_t serial{},frame{},gen{};bool valid{},haveEyeView{},headHud{};void* view{};math::M baseView{},baseP{},baseVP{},eyeVP[2],eyeView[2];float referenceYaw{},referencePosition[3]{};};
+struct Pass{uint32_t serial{},frame{},gen{};bool valid{},haveEyeView{},headHud{};void* view{};math::M baseView{},baseP{},baseVP{},eyeVP[2],eyeView[2];float referenceYaw{},referencePosition[3]{},unitsPerMetre{90.f};};
 std::array<Pass,64> passes;std::array<Set,16> sets;
 // A2k: the HUD keeps drawing (and animating) a ring on frames with no Canvas.Project;
 // the last projected points stay usable for a quarter second.
@@ -99,7 +99,7 @@ bool pointer(const Pass&p,const Anchor&a,Pass&q,Anchor&out){
  float len=std::hypot(t[0],t[1]);if(!std::isfinite(len))return false;if(len<1e-3f){t[0]=0;t[1]=-1;len=1;}
  const float r=pointerDegrees*3.14159265f/180,v[3]={std::sin(r)*t[0]/len,std::sin(r)*t[1]/len,std::cos(r)};
  float w[3]{},n=0;for(int j=0;j<3;++j){w[j]=v[0]*inv.v[0][j]+v[1]*inv.v[1][j]+v[2]*inv.v[2][j];n+=w[j]*w[j];}n=std::sqrt(n);if(n<1e-6f)return false;
- out=a;out.off=false;for(int j=0;j<3;++j)out.world[j]=inv.v[3][j]+w[j]/n*pointerDistance;
+ out=a;out.off=false;for(int j=0;j<3;++j)out.world[j]=inv.v[3][j]+w[j]/n*pointerDistance*(p.unitsPerMetre/90.f);
  q=p;q.baseView=p.eyeView[0];q.baseVP=p.eyeVP[0];return true;
 }
 bool anchor(const float*world,float*out,bool fromGrapple=false);
@@ -129,7 +129,7 @@ bool anchor(const float*world,float*out,bool fromGrapple){
 // Project the shared head-centre ray onto the actual upright HUD plane. Head
 // orientation is deliberately absent: only translation changes this layout.
 bool plane_target(const Pass&p,const Anchor&a,const float world[4][3],const float head[3],float*xy){
- float local[3]{};for(int j=0;j<3;++j)local[j]=(a.world[0]*p.baseView.v[0][j]+a.world[1]*p.baseView.v[1][j]+a.world[2]*p.baseView.v[2][j]+p.baseView.v[3][j])/90.f;
+ float local[3]{};for(int j=0;j<3;++j)local[j]=(a.world[0]*p.baseView.v[0][j]+a.world[1]*p.baseView.v[1][j]+a.world[2]*p.baseView.v[2][j]+p.baseView.v[3][j])/p.unitsPerMetre;
  local[2]=-local[2];const float c=std::cos(p.referenceYaw),s=std::sin(p.referenceYaw);
  const float target[3]={p.referencePosition[0]+c*local[0]+s*local[2],p.referencePosition[1]+local[1],p.referencePosition[2]-s*local[0]+c*local[2]};
  float right[3],down[3],ray[3];for(int j=0;j<3;++j){right[j]=world[1][j]-world[0][j];down[j]=world[2][j]-world[0][j];ray[j]=target[j]-head[j];}
@@ -247,7 +247,7 @@ bool install_engine(uintptr_t base){
  for(const auto&x:extra){BYTE got[16]{};*x.guard=read((void*)(base+x.rva),got,16)&&!memcmp(got,x.bytes,16)&&MH_CreateHook((void*)(base+x.rva),x.hook,x.orig)==MH_OK&&MH_QueueEnableHook((void*)(base+x.rva))==MH_OK;BVR_LOG("[aa grapple] %s exact entry guard%u (observe only, original runs first)",x.name,*x.guard);}
  swprintf_s(settings,L"%s\\aa_rendering.ini",log::data_dir());on=GetPrivateProfileIntW(L"AsylumVR",L"WorldGrappleMarkers",1,settings)!=0;orphanHide=GetPrivateProfileIntW(L"AsylumVR",L"HideTargetlessGrapple",0,settings)!=0;{wchar_t v[32]{};GetPrivateProfileStringW(L"AsylumVR",L"HUDDistance",L"4",v,32,settings);const float m=float(wcstod(v,nullptr));pointerDistance=(std::isfinite(m)?std::clamp(m,1.f,16.f):4.f)*90.f;pointerDegrees=std::clamp(float(GetPrivateProfileIntW(L"AsylumVR",L"GrapplePointerDegrees",26,settings)),10.f,40.f);}connectorsOn=GetPrivateProfileIntW(L"AsylumVR",L"WorldVitalsConnectors",1,settings)!=0;BVR_LOG("[aa markers] exact Canvas.Project caller/ret8 ABI; head-free target and per-vertex world card, default%u",on.load());return true;
 }
-void publish(uint32_t slot,uint32_t frame,uint32_t gen,void*view,const math::M&bv,const math::M&bp,const math::M eyeVP[2],float referenceYaw,const float*referencePosition,const math::M*eyeView,bool headHud){Pass p{};p.headHud=headHud;if(eyeView){p.eyeView[0]=eyeView[0];p.eyeView[1]=eyeView[1];p.haveEyeView=true;}p.serial=slot;p.frame=frame;p.gen=gen;p.view=view;p.baseView=bv;p.baseP=bp;p.baseVP=math::mul(bv,bp);p.eyeVP[0]=eyeVP[0];p.eyeVP[1]=eyeVP[1];p.referenceYaw=referenceYaw;if(referencePosition)memcpy(p.referencePosition,referencePosition,12);p.valid=true;gamePass=p;AcquireSRWLockExclusive(&lock);passes[slot%passes.size()]=p;ReleaseSRWLockExclusive(&lock);grapple_anchors();}
+void publish(uint32_t slot,uint32_t frame,uint32_t gen,void*view,const math::M&bv,const math::M&bp,const math::M eyeVP[2],float referenceYaw,const float*referencePosition,const math::M*eyeView,bool headHud,float unitsPerMetre){Pass p{};p.unitsPerMetre=unitsPerMetre;p.headHud=headHud;if(eyeView){p.eyeView[0]=eyeView[0];p.eyeView[1]=eyeView[1];p.haveEyeView=true;}p.serial=slot;p.frame=frame;p.gen=gen;p.view=view;p.baseView=bv;p.baseP=bp;p.baseVP=math::mul(bv,bp);p.eyeVP[0]=eyeVP[0];p.eyeVP[1]=eyeVP[1];p.referenceYaw=referenceYaw;if(referencePosition)memcpy(p.referencePosition,referencePosition,12);p.valid=true;gamePass=p;AcquireSRWLockExclusive(&lock);passes[slot%passes.size()]=p;ReleaseSRWLockExclusive(&lock);grapple_anchors();}
 void end_game_pass(){gamePass.valid=false;}
 void begin_render(uint32_t slot,bool active){AcquireSRWLockShared(&lock);renderPass=passes[slot%passes.size()];ReleaseSRWLockShared(&lock);renderPass.serial=slot;renderActive=active;}
 void begin_eye(int eye,uint32_t gen){currentEye=eye;currentGen=gen;if(eye<=0){for(auto&l:layers)l.painted=false;}}

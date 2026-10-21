@@ -2,6 +2,8 @@
 #include "core/vr/openxr_runtime.h"
 #include <cmath>
 namespace bvr::aa::math {
+// Larger apparent world => fewer game units per real metre.
+inline float world_units(float scale){return 90.f/(std::isfinite(scale)?std::fmax(.5f,std::fmin(2.f,scale)):1.f);}
 struct alignas(16) M {float v[4][4];};
 inline M mul(const M&a,const M&b){M r{};for(int i=0;i<4;i++)for(int j=0;j<4;j++)for(int k=0;k<4;k++)r.v[i][j]+=a.v[i][k]*b.v[k][j];return r;}
 inline M pose_view(const vr::HeadPose&p,float units=90){
