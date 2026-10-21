@@ -15,7 +15,7 @@ add_library(batman_asylum SHARED ${CORE_SOURCES} src/hash.cpp src/game/adapter_r
  src/game/asylum/window.cpp src/game/asylum/afw.cpp src/game/asylum/detail9.cpp src/game/asylum/pipeline_cache.cpp src/game/asylum/dynamic_pipeline.cpp src/game/asylum/managed9.cpp src/game/asylum/native9_bridge.cpp src/game/asylum/billboard9.cpp src/game/asylum/markers9.cpp src/game/asylum/menu_state.cpp src/game/asylum/transitions9.cpp src/game/asylum/first_person.cpp)
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
 file(WRITE "${CMAKE_BINARY_DIR}/generated/bvr_version.h"
- "#pragma once\n#define BVR_VERSION \"${PROJECT_VERSION}\"\n#define BVR_BUILD_ID \"Asylum-0.1.4-HEAD-AIM3\"\n")
+ "#pragma once\n#define BVR_VERSION \"${PROJECT_VERSION}\"\n#define BVR_BUILD_ID \"Asylum-0.1.4-HEAD-AIM4\"\n")
 target_include_directories(batman_asylum PRIVATE src "${CMAKE_BINARY_DIR}/generated")
 target_link_libraries(batman_asylum PRIVATE minhook imgui openxr_loader d3d11 d3d12 dxgi d3dcompiler dbghelp windowscodecs ole32 bcrypt psapi dxguid)
 target_compile_definitions(batman_asylum PRIVATE BVR_WITH_OPENXR)
@@ -58,3 +58,7 @@ add_executable(asylum_menu_state_check tests/menu_state_check.cpp src/game/asylu
 target_include_directories(asylum_menu_state_check PRIVATE src)
 target_link_libraries(asylum_menu_state_check PRIVATE shell32)
 add_test(NAME menu_state_diagnostics COMMAND asylum_menu_state_check)
+
+add_executable(asylum_stereo_pose_check tests/stereo_pose_check.cpp)
+target_include_directories(asylum_stereo_pose_check PRIVATE src)
+add_test(NAME coherent_stereo_pose COMMAND asylum_stereo_pose_check)

@@ -42,7 +42,7 @@ using GetBoneMatrixFn = float*(__thiscall*)(void* mesh, float* out, int bone);
 
 uintptr_t base = 0, imageEnd = 0;
 wchar_t settings[MAX_PATH] = {};
-std::atomic<bool> enabled{false}, followHead{true}, lookAim{true}, blockStickPitch{false};
+std::atomic<bool> enabled{false}, followHead{true}, lookAim{true};
 std::atomic<ULONGLONG> pitchGateMs{}, stickSampleMs{};
 std::atomic<int16_t> rawPitch{}, deliveredPitch{}, moveX{}, moveY{}, turnX{};
 void filter_sticks(unsigned index,int16_t* lx,int16_t* ly,int16_t* rx,int16_t* ry) {
@@ -50,11 +50,11 @@ void filter_sticks(unsigned index,int16_t* lx,int16_t* ly,int16_t* rx,int16_t* r
     const auto now=GetTickCount64();
     rawPitch=*ry; moveX=*lx; moveY=*ly; turnX=*rx;
     const auto stamp=pitchGateMs.load();
-    *ry=head_aim::filter_pitch(*ry,blockStickPitch.load(),enabled.load() && stamp && now-stamp<250);
+    *ry=head_aim::filter_pitch(*ry,lookAim.load(),enabled.load() && stamp && now-stamp<250);
     deliveredPitch=*ry; stickSampleMs=now;
 }
 bool pitch_input() {
-    return !blockStickPitch.load() && GetTickCount64()-stickSampleMs.load()<250 &&
+    return !lookAim.load() && GetTickCount64()-stickSampleMs.load()<250 &&
         std::abs(int(deliveredPitch.load()))>8689; // XInput right-stick deadzone
 }
 std::atomic<float> forwardCm{25.0f}, upCm{0.0f}, headSmoothS{0.08f};
@@ -187,7 +187,7 @@ bool drive_aim(math::M& view, const vr::HeadPose& head) {
     aimReport.head[0]=head.qx; aimReport.head[1]=head.qy; aimReport.head[2]=head.qz; aimReport.head[3]=head.qw;
     aimReport.stickX=stickX; aimReport.stickY=stickY;
     aimReport.rawY=rawPitch.load(); aimReport.moveX=moveX.load(); aimReport.moveY=moveY.load();
-    aimReport.pitchInput=acceptPitch; aimReport.pitchBlocked=blockStickPitch.load();
+    aimReport.pitchInput=acceptPitch; aimReport.pitchBlocked=lookAim.load();
     trace_sample(changed);
     ReleaseSRWLockExclusive(&aimReportLock);
     if(changed)BVR_LOG("[aa head aim] %s; generation=%u",why,pairGeneration);
@@ -285,7 +285,6 @@ void follow_head(uintptr_t pawn) {
 void save() {
     if (!settings[0]) return;
     wchar_t v[32];
-    WritePrivateProfileStringW(L"AsylumVR",L"FirstPersonBlockStickPitch",blockStickPitch.load()?L"1":L"0",settings);
     WritePrivateProfileStringW(L"AsylumVR", L"FirstPerson", enabled.load() ? L"1" : L"0", settings);
     WritePrivateProfileStringW(L"AsylumVR", L"FirstPersonLookAim", lookAim.load() ? L"1" : L"0", settings);
     swprintf_s(v, L"%.1f", forwardCm.load()); WritePrivateProfileStringW(L"AsylumVR", L"FirstPersonForwardCm", v, settings);
@@ -315,9 +314,8 @@ void install(uintptr_t imageBase, const wchar_t* settingsPath) {
     followHead.store(GetPrivateProfileIntW(L"AsylumVR", L"FirstPersonHead", 1, settings) != 0);
     headSmoothS.store(get(L"FirstPersonHeadSmooth", 0.08f, 0.0f, 0.5f));
     input::set_stick_filter(&filter_sticks);
-    blockStickPitch.store(GetPrivateProfileIntW(L"AsylumVR",L"FirstPersonBlockStickPitch",0,settings)!=0);
     overlay::set_chord_double_tap(&toggle);
-    BVR_LOG("[aa] first person %s; headset aim/HUD=%u; right stick remains additive (both sticks clicked twice quickly toggles first person)", enabled.load() ? "ON" : "off",lookAim.load());
+    BVR_LOG("[aa] first person %s; headset aim/HUD=%u; headset aim locks stick pitch; stick yaw remains additive (both sticks clicked twice quickly toggles first person)", enabled.load() ? "ON" : "off",lookAim.load());
 }
 
 void begin_frame(bool nativeActive, const menu_state::Observation& mode, uint32_t generation) {
@@ -433,18 +431,16 @@ void status_line(char* out, size_t size) {
         head_aim::wrap(r.before.pitch)*degrees,head_aim::wrap(r.before.yaw)*degrees,
         head_aim::wrap(r.observed.pitch)*degrees,head_aim::wrap(r.observed.yaw)*degrees,
         r.head[0],r.head[1],r.head[2],r.head[3],int(r.stickX),int(r.stickY),hudGen.load(),unsigned(hudFollowing.load()),hudFrames.load(),hudFailures.load(),
-        frames.load(),headFrames.load(),headMisses.load(),unsigned(blockStickPitch.load()),int(rawPitch.load()),int(deliveredPitch.load()),int(moveX.load()),int(moveY.load()),unsigned(pitch_input()));
+        frames.load(),headFrames.load(),headMisses.load(),unsigned(lookAim.load()),int(rawPitch.load()),int(deliveredPitch.load()),int(moveX.load()),int(moveY.load()),unsigned(pitch_input()));
 }
 
 void draw_ui() { // at the top of the panel: it changes the whole view (City)
     bool fp = enabled.load();
     if (ImGui::Checkbox("FIRST PERSON  (or click both sticks twice quickly)", &fp)) set_on(fp);
     if (!fp) return;
-    bool block=blockStickPitch.load();
-    if(ImGui::Checkbox("   block right-stick up / down",&block)) { blockStickPitch=block; save(); }
     bool aim=lookAim.load();
     if(ImGui::Checkbox("   aim and HUD follow the headset",&aim)) { lookAim=aim; save(); }
-    if(aim)ImGui::TextDisabled("   Close this panel to use headset aiming.");
+    if(aim)ImGui::TextDisabled("   Headset controls up / down; right stick turns left / right.");
     float f = forwardCm.load(), u = upCm.load();
     if (overlay::SliderStep("   camera in front of his face (cm)", &f, -20.0f, 80.0f, "%.0f")) { forwardCm.store(f); save(); }
     if (overlay::SliderStep("   camera up / down (cm)", &u, -40.0f, 40.0f, "%.0f")) { upCm.store(u); save(); }

@@ -2486,3 +2486,34 @@ publication expires after 250ms. Trace includes movement, raw/delivered pitch,
 and blocking/input decisions. Mouse pitch unsupported by stabilized policy;
 engine pitch adjustments during deliberate stick pitch remain inseparable.
 Retail walking/stereo/gadget behavior awaits user test, separate from CPU tests.
+
+
+## HEAD-AIM4 (complete stereo pose publication)
+
+User accepts HEAD-AIM3 walking/head aim, requests automatic stick pitch lock
+and removal of its separate checkbox. Lock now follows FirstPersonLookAim;
+legacy FirstPersonBlockStickPitch is ignored. Head-aim body pitch stays fixed
+regardless of stick input; game-facing right Y is zeroed in the valid native
+first-person context. Head aim off restores stock vertical input, yaw unchanged.
+
+Latest supplied HEAD-AIM3 log has 57 native-pose-unavailable transitions, no
+native matrix/tag/base-camera faults. CSV: 251 active samples and 5 unavailable.
+User sees 1-2 flat third-person frames in both eyes, often in smoke. SOURCE:
+xrLocateSpace publishes head/id before xrLocateViews populates the generation
+ring. Native draw reads head then that ring using separate locks: scheduling
+between publications returns false and eye=0, so first person is skipped and
+the bridge receives the stock flat frame. Smoke causality itself is unproven.
+
+Publish a complete StereoPoseMailbox after both locate calls and pose-ring
+publication; native draw copies head, eyes, FOV and generation under ONE mutex.
+The writer does not hold the mutex over OpenXR calls. The previous complete
+sample remains readable during locate, as with any latest-sample API; invalid
+tracking at completion and teardown explicitly invalidate it. No held images,
+unbounded last-valid tracking fallback, arbitrary particle changes or new RE
+seams. Legacy head/eye APIs retained for other consumers.
+
+Portable regression deterministically pauses the writer after new head locate
+but before eyes; reader gets complete previous generation, then new generation.
+Tests invalid tracking, teardown/recovery and 100000 concurrent publications.
+Native log adds coherentPoseUnavailable/flatDraws plus bounded fallback reasons.
+Windows/CPU validation is separate from smoke/headset confirmation.

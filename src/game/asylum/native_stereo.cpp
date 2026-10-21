@@ -46,7 +46,7 @@ thread_local unsigned pairInputWidth{},pairInputHeight{};
 Camera renderedCamera{};
 std::atomic<W> width{},height{},owner{};
 std::atomic<unsigned> draws{},pairs{},edits{},invalid{},misses{},baseChanged{};
-std::atomic<unsigned> completed{};
+std::atomic<unsigned> completed{}, poseUnavailable{}, flatDraws{};
 std::atomic<ULONGLONG> lastPresent{};
 std::atomic<const char*> failureReason{"No validation failure"};
 struct Caller {W rva{};unsigned prepass{},ordinary{},views{};} callers[16]{};
@@ -103,8 +103,10 @@ void __fastcall draw(void*self,void*edx){
  markers9::end_game_pass();
  if(depth||!main_viewport(self)){drawOriginal(self,edx);return;}
  const W ra=W(reinterpret_cast<uintptr_t>(_ReturnAddress())-base);++draws;
- poseValid=vr::get_head_pose_gen(head,&generation);
- if(poseValid)for(int e=0;e<2;e++)poseValid=vr::get_eye_pose_gen(generation,e,eyes[e],angles[e])&&poseValid;
+ vr::StereoPose stereo{};poseValid=vr::get_stereo_pose(stereo);
+ if(poseValid){head=stereo.head;generation=stereo.generation;
+  memcpy(eyes,stereo.eyes,sizeof(eyes));memcpy(angles,stereo.angles,sizeof(angles));}
+ else generation=0;
  if(poseValid){
   if(recentre.exchange(false)){yawRef=std::atan2(2*(head.qx*head.qz+head.qw*head.qy),1-2*(head.qx*head.qx+head.qy*head.qy));posRef[0]=head.px;posRef[1]=head.py;posRef[2]=head.pz;}
   relative(head);relative(eyes[0]);relative(eyes[1]);
@@ -116,6 +118,10 @@ void __fastcall draw(void*self,void*edx){
  // Select only this target's observed ordinary viewport and an owner whose
  // actual CalcSceneView->constructor has already passed matrix validation.
  const bool active=ready&&wantNative&&!failed&&poseValid&&width&&height&&owner==ra&&renders;
+ if(renders && wantNative && !active){
+  const auto n=++flatDraws;if(!poseValid)++poseUnavailable;
+  if(n<=8 || n%120==0)BVR_LOG("[aa native fallback] flatDraw=%u coherentPose=%u ready=%u failed=%u size=%ux%u owner=%08X caller=%08X",n,poseValid,ready.load(),failed.load(),width.load(),height.load(),owner.load(),ra);
+ }
  const auto mode=menu_state::observe();pairMode=mode.mode; // One snapshot shared by both eyes.
  if(renders)first_person::begin_frame(active,mode,generation);
  pairCentred=centredLens.load();pairAFW=active&&afw::on();
@@ -269,7 +275,7 @@ const char* rendering_status(){
  return owner?"Floating screen - no stereo scene in this Present":"Floating screen - waiting for a 3D scene render";
 }
 unsigned completed_pairs(){return completed;}
-void status(){BVR_LOG("[aa native] selected %u ready %u failed %u owner %08X | draws %u queuedPairs %u completedPairs %u edits %u invalid %u tagMiss %u baseCameraChanged %u | %s",wantNative.load(),ready.load(),failed.load(),owner.load(),draws.load(),pairs.load(),completed.load(),edits.load(),invalid.load(),misses.load(),baseChanged.load(),rendering_status());billboard9::status();}
+void status(){BVR_LOG("[aa native] selected %u ready %u failed %u owner %08X | draws %u queuedPairs %u completedPairs %u edits %u invalid %u tagMiss %u baseCameraChanged %u coherentPoseUnavailable %u flatDraws %u | %s",wantNative.load(),ready.load(),failed.load(),owner.load(),draws.load(),pairs.load(),completed.load(),edits.load(),invalid.load(),misses.load(),baseChanged.load(),poseUnavailable.load(),flatDraws.load(),rendering_status());billboard9::status();}
 bool selected(){return wantNative;}
 void select(bool on){wantNative=on;dlss::reset();afw::reset();if(on)recentre=true;}
 void recenter(){recentre=true;dlss::reset();afw::reset();}
